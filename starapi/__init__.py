@@ -1,17 +1,9 @@
-from .actions import *
 from .app import *
-from .channel import *
-from .checks import *
-from .database import *
-from .flags import *
-from .gambling import *
+from .cors import *
+from .errors import *
 from .groups import *
+from .requests import *
 from .responses import *
 from .routing import *
-from .shop import *
-from .tokens import *
-from .user import *
 
-CODE_POPULATION = "qwertyuiopasdfghjklzxcvbnm"
-CODE_POPULATION += CODE_POPULATION.upper()
-CODE_POPULATION += "1234567890"
+__version__ = "0.0.1a"

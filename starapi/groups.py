@@ -3,9 +3,8 @@ from __future__ import annotations
 import inspect
 from typing import TYPE_CHECKING
 
-from starlette import routing as _routing
-
-from .routing import Route, WSRoute
+from .routing import Route, RouteType, WSRoute
+from .utils import MISSING
 
 if TYPE_CHECKING:
     from .app import Application
@@ -13,58 +12,63 @@ if TYPE_CHECKING:
     from .responses import Response
 
 
+__all__ = ("Group",)
+
+
 class Group:
     prefix: str
-    __routes__: list[_routing.Route | _routing.WebSocketRoute]
+    __routes__: list[RouteType]
     app: Application
 
-    def __init_subclass__(cls, prefix: str | None = None) -> None:
+    def __init_subclass__(cls, prefix: str = MISSING) -> None:
         cls.prefix = prefix or cls.__name__
+        if cls.prefix and not cls.prefix.startswith("/"):
+            cls.prefix = f"/{cls.prefix}"
 
     def __init__(self, app: Application) -> None:
         self.__routes__ = []
         self.app = app
 
-        for _, member in inspect.getmembers(
-            self, predicate=lambda m: isinstance(m, (Route, WSRoute))
+        for _, route in inspect.getmembers(
+            self, predicate=lambda m: isinstance(m, Route | WSRoute)
         ):
-            member: Route | WSRoute
+            route: Route | WSRoute
 
-            member._group = self
-            path: str = member._path
+            route._group = self
+            route._path = f'{self.prefix.lower()}/{route.path.lstrip("/")}'
+            self.__routes__.append(route)
 
-            if member._prefix:
-                path = (
-                    f'/{self.prefix.lower()}/{path.lstrip("/")}'
-                    if self.prefix
-                    else f'/{path.lstrip("/")}'
-                )
-
-            for method in member._methods:
+            """for method in route._methods:
                 method = method.lower()
 
-                setattr(member, method, member._callback)
-
-            name = (
-                f"{self.prefix}.{member._callback.__name__}"
-                if self.prefix
-                else member._callback.__name__
-            )
-
-            if isinstance(member, WSRoute):
-                route = _routing.WebSocketRoute(
-                    path=path, endpoint=member._callback, name=name
-                )
-            else:
-                route = _routing.Route(
-                    path=path, endpoint=member, methods=member._methods, name=name
-                )
-
-            self.__routes__.append(route)
+                setattr(member, method, member._callback)"""
 
     @property
     def name(self) -> str:
         return self.__class__.__name__.lower()
 
+    @property
+    def routes(self) -> list[RouteType]:
+        return self.__routes__
+
     async def group_check(self, request: Request) -> Response | None:
-        return
+        """
+        Group check. Before routes in this group are executed, this gets called.
+        If a response is returned, the route will not be executed and the response will be sent.
+        If None is returned, the route will be executed.
+
+        Parameters
+        -----------
+        request: Request
+            The request
+
+        Returns
+        -----------
+        Response | None
+            The response or None
+        """
+
+        ...
+
+    async def on_error(self, request: Request, exec: Exception) -> None:
+        ...

@@ -2,3 +2,5 @@ starlette
 uvicorn
 msgspec
 websockets
+yarl
+python-multipart
