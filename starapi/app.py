@@ -5,12 +5,12 @@ from typing import TYPE_CHECKING, Any, Callable, Coroutine, TypeVar
 from starlette.middleware import Middleware
 from starlette.middleware.errors import ServerErrorMiddleware
 from starlette.middleware.exceptions import ExceptionMiddleware
-from starlette.routing import Router
-from starlette.types import ASGIApp, Receive, Scope, Send
+# from starlette.routing import Router
+from ._types import ASGIApp, Receive, Scope, Send, Lifespan
 
 from .cors import CORSSettings
 from .errors import GroupAlreadyAdded, UvicornNotInstalled
-from .routing import HTTPRouteCallback, Route, RouteType, WSRoute, WSRouteCallback
+from .routing import HTTPRouteCallback, Route, RouteType, Router
 from .state import State
 from .utils import MISSING
 
@@ -35,7 +35,6 @@ __all__ = ("Application",)
 
 class Application:
     _groups: list[Group] = []
-    _routes: list[RouteType]
     _middleware_stack: ASGIApp
 
     def __init__(
@@ -43,6 +42,7 @@ class Application:
         *,
         debug: bool = MISSING,
         cors: CORSSettings = MISSING,
+        lf: Lifespan = MISSING
     ) -> None:
         self._middleware: list[Middleware] = [
             cors._to_middleware() if cors else CORSSettings()._to_middleware(),
@@ -51,8 +51,7 @@ class Application:
         self.debug = False if MISSING else debug
         self._state = State(self)
         self._router = Router(
-            on_startup=[self.on_startup],
-            on_shutdown=[self.on_shutdown],
+            lifespan=lf
         )
         self.status_handlers: dict[int, HandleStatusFunc] = {}
         self._routes = []
@@ -78,7 +77,7 @@ class Application:
             raise GroupAlreadyAdded(group.name)
 
         for route in group.__routes__:
-            route._path = f"/{prefix or ''}{route.path}"
+            route.path = f"/{prefix or ''}{route.path}"
 
             self.add_route(route)
 
@@ -94,16 +93,10 @@ class Application:
 
     @property
     def routes(self) -> list[RouteType]:
-        return self._routes
-
-    async def on_startup(self):
-        ...
+        return self._router.routes
 
     async def on_error(self, request: Request, error: Exception):
         raise error
-
-    async def on_shutdown(self):
-        ...
 
     async def on_request(self, request: Request):
         ...
@@ -139,8 +132,7 @@ class Application:
 
     def add_route(self, route: RouteType, /) -> None:
         route._state = self._state
-        self._router.routes.append(route._to_resolved())
-        self._routes.append(route)
+        self._router.routes.append(route)
 
     def handle_status(
         self, status_code: int
@@ -160,16 +152,6 @@ class Application:
             route = Route(
                 path=path, callback=callback, methods=methods or ["GET"], prefix=False
             )
-            self.add_route(route)
-            return route
-
-        return decorator
-
-    def ws(
-        self, path: str
-    ) -> Callable[[WSRouteCallback], RouteType,]:
-        def decorator(callback: WSRouteCallback) -> WSRoute:
-            route = WSRoute(path=path, callback=callback, prefix=False)
             self.add_route(route)
             return route
 

@@ -1,4 +1,4 @@
-from starlette.types import ASGIApp, Receive, Scope, Send
+from ._types import ASGIApp, Receive, Scope, Send
 
 
 class BaseMiddleware:

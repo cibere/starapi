@@ -14,14 +14,13 @@ from urllib.parse import parse_qs
 
 from starlette.datastructures import FormData
 from starlette.formparsers import FormParser, MultiPartException, MultiPartParser
-from starlette.requests import Request as _R
 from starlette.requests import cookie_parser
-from starlette.types import Receive, Scope, Send
+from ._types import Receive, Scope, Send
 from yarl import URL
 
-from starapi.errors import ClientDisconnect, HTTPException
+from .errors import ClientDisconnect, HTTPException
 
-from .utils import cached_coro, cached_gen, cached_property
+from .utils import cached_coro, cached_gen, cached_property, url_from_scope
 
 try:
     from multipart.multipart import parse_options_header
@@ -83,32 +82,7 @@ class Request(Generic[AppT]):
 
     @cached_property
     def url(self) -> URL:
-        scheme = self._scope.get("scheme", "http")
-        server = self._scope.get("server", None)
-        path = self._scope.get("root_path", "") + self._scope["path"]
-        query_string = self._scope.get("query_string", b"")
-
-        host_header = None
-        for key, value in self._scope["headers"]:
-            if key == b"host":
-                host_header = value.decode("latin-1")
-                break
-
-        if host_header is not None:
-            url = f"{scheme}://{host_header}{path}"
-        elif server is None:
-            url = path
-        else:
-            host, port = server
-            default_port = {"http": 80, "https": 443, "ws": 80, "wss": 443}[scheme]
-            if port == default_port:
-                url = f"{scheme}://{host}{path}"
-            else:
-                url = f"{scheme}://{host}:{port}{path}"
-
-        if query_string:
-            url += "?" + query_string.decode()
-        return URL(url)
+        return url_from_scope(self._scope)
 
     @cached_property
     def base_url(self) -> URL:

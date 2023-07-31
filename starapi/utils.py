@@ -9,6 +9,8 @@ from typing import (
     Type,
     TypeVar,
 )
+from ._types import Scope
+from yarl import URL
 
 CoroT = TypeVar("CoroT", bound=Callable[..., Coroutine])
 GenT = TypeVar("GenT", bound=Callable[..., AsyncGenerator])
@@ -113,3 +115,31 @@ def cached_gen(coro: GenT) -> GenT:
             yield item
 
     return wrapped  # type: ignore
+
+def url_from_scope(scope: Scope) -> URL:
+    scheme = scope.get("scheme", "http")
+    server = scope.get("server", None)
+    path = scope.get("root_path", "") + scope["path"]
+    query_string = scope.get("query_string", b"")
+
+    host_header = None
+    for key, value in scope["headers"]:
+        if key == b"host":
+            host_header = value.decode("latin-1")
+            break
+
+    if host_header is not None:
+        url = f"{scheme}://{host_header}{path}"
+    elif server is None:
+        url = path
+    else:
+        host, port = server
+        default_port = {"http": 80, "https": 443, "ws": 80, "wss": 443}[scheme]
+        if port == default_port:
+            url = f"{scheme}://{host}{path}"
+        else:
+            url = f"{scheme}://{host}:{port}{path}"
+
+    if query_string:
+        url += "?" + query_string.decode()
+    return URL(url)

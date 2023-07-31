@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 from typing import TYPE_CHECKING
 
-from .routing import Route, RouteType, WSRoute
+from .routing import Route, RouteType
 from .utils import MISSING
 
 if TYPE_CHECKING:
@@ -30,12 +30,12 @@ class Group:
         self.app = app
 
         for _, route in inspect.getmembers(
-            self, predicate=lambda m: isinstance(m, Route | WSRoute)
+            self, predicate=lambda m: isinstance(m, Route)
         ):
-            route: Route | WSRoute
+            route: Route
 
             route._group = self
-            route._path = f'{self.prefix.lower()}/{route.path.lstrip("/")}'
+            route.path = f'{self.prefix.lower()}/{route.path.lstrip("/")}'
             self.__routes__.append(route)
 
             """for method in route._methods:
