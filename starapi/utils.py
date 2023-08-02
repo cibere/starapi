@@ -1,5 +1,7 @@
-import inspect
+from __future__ import annotations
+
 from functools import wraps
+from http.cookies import _unquote as unqoute
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -9,7 +11,8 @@ from typing import (
     Type,
     TypeVar,
 )
-from ._types import Scope
+from urllib.parse import unquote
+
 from yarl import URL
 
 CoroT = TypeVar("CoroT", bound=Callable[..., Coroutine])
@@ -37,6 +40,8 @@ def _cached_property(func: Callable):
 
 if TYPE_CHECKING:
     from functools import cached_property as cached_property
+
+    from ._types import Scope
 else:
     cached_property = _cached_property
 
@@ -116,6 +121,7 @@ def cached_gen(coro: GenT) -> GenT:
 
     return wrapped  # type: ignore
 
+
 def url_from_scope(scope: Scope) -> URL:
     scheme = scope.get("scheme", "http")
     server = scope.get("server", None)
@@ -143,3 +149,15 @@ def url_from_scope(scope: Scope) -> URL:
     if query_string:
         url += "?" + query_string.decode()
     return URL(url)
+
+
+def parse_cookies(before: str, /) -> dict:
+    after = {}
+
+    for chunk in before.split(";"):
+        if "=" in chunk:
+            name, value = chunk.split("=", 1)
+        else:
+            name, value = "", chunk
+        after[name.strip()] = unqoute(value.strip())
+    return after

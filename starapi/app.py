@@ -1,16 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, TypeVar
 
-from starlette.middleware import Middleware
-from starlette.middleware.errors import ServerErrorMiddleware
-from starlette.middleware.exceptions import ExceptionMiddleware
-# from starlette.routing import Router
-from ._types import ASGIApp, Receive, Scope, Send, Lifespan
-
-from .cors import CORSSettings
 from .errors import GroupAlreadyAdded, UvicornNotInstalled
-from .routing import HTTPRouteCallback, Route, RouteType, Router
+from .requests import Request
+from .routing import HTTPRouteCallback, Route, RouteType
 from .state import State
 from .utils import MISSING
 
@@ -20,8 +15,8 @@ except ImportError:
     uvicorn = None
 
 if TYPE_CHECKING:
+    from ._types import Lifespan, Middleware, Receive, Scope, Send
     from .groups import Group
-    from .requests import Request
     from .responses import Response
 
     HandleStatusFunc = Callable[[Request, int], Coroutine[Any, Any, Response]]
@@ -34,27 +29,19 @@ __all__ = ("Application",)
 
 
 class Application:
-    _groups: list[Group] = []
-    _middleware_stack: ASGIApp
+    _middleware: list[Middleware]
 
     def __init__(
         self,
         *,
         debug: bool = MISSING,
-        cors: CORSSettings = MISSING,
-        lf: Lifespan = MISSING
+        # cors: CORSSettings = MISSING,
+        lf: Lifespan = MISSING,
     ) -> None:
-        self._middleware: list[Middleware] = [
-            cors._to_middleware() if cors else CORSSettings()._to_middleware(),
-        ]
+        self._middleware: list[Middleware] = []  # [cors or CORSSettings()]
 
         self.debug = False if MISSING else debug
-        self._state = State(self)
-        self._router = Router(
-            lifespan=lf
-        )
-        self.status_handlers: dict[int, HandleStatusFunc] = {}
-        self._routes = []
+        self._state = State(self, lf)
 
     def add_group(self, group: Group, *, prefix: str = MISSING) -> None:
         """
@@ -73,7 +60,7 @@ class Application:
             If a group with the same name was already registered
         """
 
-        if group in self._groups:
+        if group in self._state.groups:
             raise GroupAlreadyAdded(group.name)
 
         for route in group.__routes__:
@@ -81,7 +68,7 @@ class Application:
 
             self.add_route(route)
 
-        self._groups.append(group)
+        self._state.groups.append(group)
 
     @property
     def groups(self) -> list[Group]:
@@ -89,59 +76,30 @@ class Application:
         Returns a list of all of the added groups
         """
 
-        return self._groups
+        return self._state.groups
 
     @property
     def routes(self) -> list[RouteType]:
-        return self._router.routes
-
-    async def on_error(self, request: Request, error: Exception):
-        raise error
-
-    async def on_request(self, request: Request):
-        ...
-
-    @property
-    def middleware_stack(self) -> ASGIApp:
-        if not hasattr(self, "_middleware_stack"):
-            middleware = (
-                [
-                    Middleware(
-                        ServerErrorMiddleware, handler=self.on_error, debug=self.debug
-                    )
-                ]
-                + self._middleware
-                + [
-                    Middleware(
-                        ExceptionMiddleware,
-                        handlers=self.status_handlers,
-                        debug=self.debug,
-                    )
-                ]
-            )
-
-            app = self._router
-            for cls, options in reversed(middleware):
-                app = cls(app=app, **options)
-            return app
-        return self._middleware_stack
+        return self._state.router.routes
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         scope["app"] = self
-        await self.middleware_stack(scope, receive, send)
+
+        match scope["type"]:
+            case "http":
+                request = Request(scope, receive, send)
+
+                for middleware in self._middleware:
+                    await middleware(request)
+                await self._state.router(request)
+            case "lifespan":
+                await self._state.router.lifespan(scope, receive, send)
+            case other:
+                raise RuntimeError(f"Unknown scope tyoe: {other!r}")
 
     def add_route(self, route: RouteType, /) -> None:
         route._state = self._state
-        self._router.routes.append(route)
-
-    def handle_status(
-        self, status_code: int
-    ) -> Callable[[HandleStatusFuncT], HandleStatusFuncT]:
-        def decorator(coro: HandleStatusFuncT) -> HandleStatusFuncT:
-            self.status_handlers[status_code] = coro
-            return coro
-
-        return decorator
+        self._state.router.routes.append(route)
 
     def route(
         self,
@@ -168,3 +126,9 @@ class Application:
 
         server = uvicorn.Server(uvicorn.Config(self, host=host, port=port, **kwargs))
         await server.serve()
+
+    async def on_error(self, request: Request, error: Exception):
+        raise error
+
+    async def on_request(self, request: Request):
+        ...

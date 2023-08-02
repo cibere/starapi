@@ -1,26 +1,24 @@
 from __future__ import annotations
 
+import re
+import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Coroutine
-from typing import TYPE_CHECKING, Any, Generic, Literal, Type, TypeAlias, TypeVar, Self
-from re import Pattern
-import traceback
+from re import L, Pattern
+from typing import TYPE_CHECKING, Any, Generic, Literal, Self, Type, TypeAlias, TypeVar
+
+# from starlette.routing import compile_path
+from yarl import URL
+
+from .converters import builtin_converters
+from .enums import Match
 from .requests import Request
 from .responses import Response
-from .utils import MISSING, url_from_scope
-from yarl import URL
-from starlette.routing import compile_path
-from .enums import Match
+from .utils import MISSING
+
 if TYPE_CHECKING:
-    from typing_extensions import TypeVar
-
-    from .groups import Group
+    from ._types import Converter, GroupT, Lifespan, Receive, Scope, Send
     from .state import State
-    from ._types import Receive, Scope, Send, Lifespan, AppT
-
-    GroupT = TypeVar("GroupT", bound=Group, covariant=True, default=Group)
-else:
-    GroupT = TypeVar("GroupT", bound="Group")
 
 
 __all__ = ("route", "Route")
@@ -29,17 +27,18 @@ RouteType: TypeAlias = "Route"
 ResponseType: TypeAlias = Coroutine[Any, Any, Response]
 HTTPRouteCallback: TypeAlias = Callable[..., ResponseType]
 
-RouteDecoCallbackType: TypeAlias = (
-    Callable[
-        [HTTPRouteCallback],
-        RouteType,
-    ]
+RouteDecoCallbackType: TypeAlias = Callable[
+    [HTTPRouteCallback],
+    RouteType,
+]
+
+PARAM_REGEX = re.compile(
+    r"{(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)(?P<type>:[a-zA-Z_][a-zA-Z0-9_]*)?}"
 )
 
 
-
 class _DefaultLifespan:
-    def __init__(self, app: AppT) -> None:
+    def __init__(self, app) -> None:
         ...
 
     async def __aenter__(self) -> None:
@@ -48,23 +47,23 @@ class _DefaultLifespan:
     async def __aexit__(self, *exc_info: object) -> None:
         ...
 
+
 class BaseRoute(ABC, Generic[GroupT]):
     _group: GroupT | None
     _state: State
-    _path_regex: Pattern
+    _path_data: list[tuple[str, Converter, str | None]]
 
     def __init__(self, *, path: str, prefix: bool) -> None:
-        self._path: str = path
+        self.path = path
         self._add_prefix: bool = prefix
 
         self._group = None
         self._resolved = None
-        self._path_regex, _, self._path_convertors = compile_path(path)
 
     @abstractmethod
     def _match(self, scope: Scope) -> tuple[Match, Scope]:
         raise NotImplementedError()
-    
+
     @property
     def group(self) -> GroupT | None:
         return self._group
@@ -76,11 +75,27 @@ class BaseRoute(ABC, Generic[GroupT]):
     @path.setter
     def path(self, new_path: str):
         self._path = new_path
-        self._path_regex = compile_path(new_path)
+        self._compile_path()
 
     @property
     def add_prefix(self) -> bool:
         return self._add_prefix
+
+    def _compile_path(self) -> None:
+        path: list[tuple[str, Converter, str | None]] = []
+
+        for endpoint in self.path.split("/"):
+            convertor = None
+            name = None
+            regex = r".*"
+
+            if data := PARAM_REGEX.fullmatch(endpoint):
+                regex, convertor = builtin_converters.get(data["type"], (r".*", None))
+                name = data["name"]
+
+            convertor = convertor or str
+            path.append((regex, convertor, name))
+        self._path_data = path
 
 
 class Route(BaseRoute):
@@ -104,26 +119,22 @@ class Route(BaseRoute):
     def methods(self) -> list[str]:
         return self._methods
 
-    def _match(self, scope: Scope) -> tuple[Match, Scope]:
-        match = self._path_regex.match(scope['path'])
-        if match:
-            data = match.groupdict()
-            for key, value in data.items():
-                data[key] = self._path_convertors[key].convert(value)
+    def _match(self, request: Request) -> bool:
+        client_path = request._scope["path"].split("/")
+        if len(client_path) != len(self._path_data):
+            return False
 
-            path_params = dict(scope.get("path_params", {}))
-            path_params.update(data)
-            child_scope = {"path_params": path_params}
-            
-            if self.methods and scope["method"] not in self.methods:
-                return Match.PARTIAL, child_scope
-            else:
-                return Match.FULL, child_scope
-        return Match.NONE, {}
+        params = {}
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        request = Request(scope, receive, send)
+        for client_endpoint, server_endpoint in zip(client_path, self._path_data):
+            regex, convertor, name = server_endpoint
+            if not re.fullmatch(regex, client_endpoint):
+                return False
+            params[name] = convertor(client_endpoint)
+        request._scope["path_params"] = params
+        return True
 
+    async def __call__(self, request: Request) -> None:
         args = []
 
         response = None
@@ -145,7 +156,8 @@ class Route(BaseRoute):
                 self._state.on_route_error(request, e)
                 response = Response.internal()
 
-        await response(scope, receive, send)
+        await response(request)
+
 
 class RouteSelector:
     def __call__(
@@ -179,6 +191,7 @@ class RouteSelector:
 
 route = RouteSelector()
 
+
 class Router:
     routes: list[RouteType]
     lifespan_context: Lifespan
@@ -194,10 +207,9 @@ class Router:
         startup and shutdown events.
         """
         started = False
-        app: AppT = scope.get("app")
         await receive()
         try:
-            async with self.lifespan_context(app) as maybe_state:
+            async with self.lifespan_context(scope.get("app")) as maybe_state:
                 if maybe_state is not None:
                     if "state" not in scope:
                         raise RuntimeError(
@@ -217,51 +229,11 @@ class Router:
         else:
             await send({"type": "lifespan.shutdown.complete"})
 
-
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        assert scope["type"] in ("http", "websocket", "lifespan")
-
-        if "router" not in scope:
-            scope["router"] = self
-
-        if scope["type"] == "lifespan":
-            await self.lifespan(scope, receive, send)
-            return
-
-        partial = None
+    async def __call__(self, request: Request) -> None:
+        assert request._scope["type"] in ("http", "websocket")
 
         for route in self.routes:
-            # Determine if any route matches the incoming scope,
-            # and hand over to the matching route if found.
-            match, child_scope = route._match(scope)
-            if match == Match.FULL:
-                scope.update(child_scope)
-                await route(scope, receive, send)
-                return
-            elif match == Match.PARTIAL and partial is None:
-                partial = route
-                partial_scope = child_scope
+            if route._match(request) is True:
+                return await route(request)
 
-        if partial is not None:
-            #  Handle partial matches. These are cases where an endpoint is
-            # able to handle the request, but is not a preferred option.
-            # We use this in particular to deal with "405 Method Not Allowed".
-            scope.update(partial_scope)
-            await partial(scope, receive, send)
-            return
-
-        """if scope["type"] == "http" and self.redirect_slashes and scope["path"] != "/":
-            redirect_scope = dict(scope)
-            if scope["path"].endswith("/"):
-                redirect_scope["path"] = redirect_scope["path"].rstrip("/")
-            else:
-                redirect_scope["path"] = redirect_scope["path"] + "/"
-
-            for route in self.routes:
-                match, child_scope = route.matches(redirect_scope)
-                if match != Match.NONE:
-                    response = Response.redirect(str(url_from_scope(redirect_scope)))
-                    await response(scope, receive, send)
-                    return"""
-
-        await Response.not_found()(scope, receive, send)
+        await Response.not_found()(request)

@@ -1,9 +1,15 @@
-from ._types import ASGIApp, Receive, Scope, Send
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .requests import Request
+
+__all__ = ("BaseMiddleware",)
 
 
-class BaseMiddleware:
-    def __init__(self, app: ASGIApp):
-        self.app = app
-
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        await self.app(scope, receive, send)
+class BaseMiddleware(ABC):
+    @abstractmethod
+    async def __call__(self, request: Request) -> None:
+        ...

@@ -3,16 +3,25 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
+from .routing import Router
+from .utils import MISSING
+
 if TYPE_CHECKING:
+    from ._types import Lifespan
     from .app import Application
+    from .groups import Group
     from .requests import Request
+
 
 __all__ = ("State",)
 
 
 class State:
-    def __init__(self, app: Application):
+    def __init__(self, app: Application, lifespan: Lifespan = MISSING):
         self.app = app
+        self.router = Router(lifespan=lifespan)
+
+        self.groups: list[Group] = []
 
     async def _handle_route_error(self, request: Request, error: Exception) -> None:
         route = request.endpoint

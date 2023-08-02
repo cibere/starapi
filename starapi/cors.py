@@ -1,14 +1,19 @@
-from typing import Sequence
+from __future__ import annotations
 
-from starlette.middleware import Middleware
+from typing import TYPE_CHECKING, Any, Coroutine, Sequence
+
 from starlette.middleware.cors import CORSMiddleware
 
+from .middleware import BaseMiddleware
 from .utils import MISSING
+
+if TYPE_CHECKING:
+    from .requests import Request
 
 __all__ = ("CORSSettings",)
 
 
-class CORSSettings:
+class CORSSettings(BaseMiddleware):
     def __init__(
         self,
         allow_origins: Sequence[str] = MISSING,
@@ -27,9 +32,9 @@ class CORSSettings:
         self.expose_headers = expose_headers or ()
         self.max_age = max_age or 600
 
-    def _to_middleware(self) -> Middleware:
-        return Middleware(
-            CORSMiddleware,
+    def __call__(self, request: Request) -> Coroutine[Any, Any, Any]:
+        return CORSMiddleware(
+            app=request.app,
             allow_origins=self.allow_origins,
             allow_methods=self.allow_methods,
             allow_headers=self.allow_headers,
@@ -37,4 +42,4 @@ class CORSSettings:
             allow_origin_regex=self.allow_origin_regex,
             expose_headers=self.expose_headers,
             max_age=self.max_age,
-        )
+        )(request._scope, request._receive, request._send)

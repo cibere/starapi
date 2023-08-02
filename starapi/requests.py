@@ -14,20 +14,24 @@ from urllib.parse import parse_qs
 
 from starlette.datastructures import FormData
 from starlette.formparsers import FormParser, MultiPartException, MultiPartParser
-from starlette.requests import cookie_parser
-from ._types import Receive, Scope, Send
 from yarl import URL
 
 from .errors import ClientDisconnect, HTTPException
-
-from .utils import cached_coro, cached_gen, cached_property, url_from_scope
+from .utils import (
+    cached_coro,
+    cached_gen,
+    cached_property,
+    parse_cookies,
+    url_from_scope,
+)
 
 try:
     from multipart.multipart import parse_options_header
-except ModuleNotFoundError:  # pragma: nocover
+except ModuleNotFoundError:
     parse_options_header = None
 
 if TYPE_CHECKING:
+    from ._types import Receive, Scope, Send
     from .app import Application
     from .routing import Route
 
@@ -102,7 +106,7 @@ class Request(Generic[AppT]):
         cookie_header = self.headers.get("cookie")
 
         if cookie_header:
-            cookies = cookie_parser(cookie_header)
+            cookies = parse_cookies(cookie_header)
         return cookies
 
     @cached_property
