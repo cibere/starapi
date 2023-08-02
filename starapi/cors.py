@@ -42,4 +42,6 @@ class CORSSettings(BaseMiddleware):
             allow_origin_regex=self.allow_origin_regex,
             expose_headers=self.expose_headers,
             max_age=self.max_age,
-        )(request._scope, request._receive, request._send)
+        )(
+            request._scope, request._receive, request._send  # type: ignore
+        )
