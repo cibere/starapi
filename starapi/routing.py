@@ -26,7 +26,7 @@ __all__ = ("route", "Route")
 RouteType: TypeAlias = "Route"
 ResponseType: TypeAlias = Coroutine[Any, Any, Response]
 HTTPRouteCallback: TypeAlias = Callable[..., ResponseType]
-
+WSRouteCallback: TypeAlias = "WebSocketRoute"
 RouteDecoCallbackType: TypeAlias = Callable[
     [HTTPRouteCallback],
     RouteType,
@@ -159,6 +159,55 @@ class Route(BaseRoute):
         await response(request)
 
 
+class WebSocketRoute(BaseRoute):
+    def __init__(
+        self,
+        *,
+        path: str,
+        prefix: bool = MISSING,
+    ) -> None:
+        super().__init__(path=path, prefix=prefix)
+
+    def _match(self, request: Request) -> bool:
+        client_path = request._scope["path"].split("/")
+        if len(client_path) != len(self._path_data):
+            return False
+
+        params = {}
+
+        for client_endpoint, server_endpoint in zip(client_path, self._path_data):
+            regex, convertor, name = server_endpoint
+            if not re.fullmatch(regex, client_endpoint):
+                return False
+            params[name] = convertor(client_endpoint)
+        request._scope["path_params"] = params
+        return True
+
+    async def __call__(self, request: Request) -> None:
+        args = []
+
+        response = None
+        if self._group is not None:
+            args.append(self._group)
+
+            try:
+                response = await self._group.group_check(request)
+            except Exception as e:
+                self._state.on_route_error(request, e)
+                response = Response.internal()
+
+        if response is None:
+            args.append(request)
+
+            try:
+                response = await self._callback(*args)
+            except Exception as e:
+                self._state.on_route_error(request, e)
+                response = Response.internal()
+
+        await response(request)
+
+
 class RouteSelector:
     def __call__(
         self,
@@ -234,6 +283,8 @@ class Router:
 
         for route in self.routes:
             if route._match(request) is True:
+                if request.method not in route.methods:
+                    return await Response.method_not_allowed()(request)
                 return await route(request)
 
         await Response.not_found()(request)

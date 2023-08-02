@@ -112,3 +112,9 @@ class Response:
         headers = headers or {}
         headers["location"] = quote(url, safe=":/%#?=@[]!$&'()*+,;")
         return cls(b"", headers=headers)
+
+    @classmethod
+    def method_not_allowed(
+        cls, data: DataType = None, headers: Optional[dict[str, str]] = None
+    ) -> Self:
+        return cls("Method Not Allowed" if data is None else data, 405, headers=headers)
