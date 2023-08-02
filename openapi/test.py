@@ -205,7 +205,7 @@ def get_swagger_ui_oauth2_redirect_html() -> HTMLResponse:
 
 if __name__ == "__main__":
     resp = get_swagger_ui_html(
-        openapi_url="https://cdn.discordapp.com/attachments/1104232871998259321/1136423616515428445/openapi.json",
+        openapi_url="https://raw.githubusercontent.com/cibere/some-web-framework/feature-openapi/openapi.json?token=GHSAT0AAAAAACA3NG45PKT3AVTVBGKKA6YOZGK3CJQ",
         title="My API",
     )
     with open("docs.html", "w", encoding="utf-8") as f:
