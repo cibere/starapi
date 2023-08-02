@@ -1,10 +1,9 @@
 # some web framework
 
-built ontop of starlette
+yes
 
 ## TODO
 
-- WS
 - Cors
 - Finish Removing starlette as a dep
   - Routing
