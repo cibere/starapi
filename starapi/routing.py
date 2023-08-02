@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Generic, Literal, Self, Type, TypeAlias, 
 # from starlette.routing import compile_path
 from yarl import URL
 
+from ._types import Converter, GroupT, Lifespan, Receive, Scope, Send
 from .converters import builtin_converters
 from .enums import Match
 from .requests import Request
@@ -17,7 +18,6 @@ from .responses import Response
 from .utils import MISSING
 
 if TYPE_CHECKING:
-    from ._types import Converter, GroupT, Lifespan, Receive, Scope, Send
     from .state import State
 
 
