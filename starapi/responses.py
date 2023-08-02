@@ -7,7 +7,7 @@ from urllib.parse import quote
 DataType = list | str | dict | None
 
 if TYPE_CHECKING:
-    from .requests import Request
+    from .requests import BaseRequest
 
 __all__ = ("Response",)
 
@@ -61,7 +61,7 @@ class Response:
 
         return raw_headers
 
-    async def __call__(self, request: Request) -> None:
+    async def __call__(self, request: BaseRequest) -> None:
         await request._send(
             {
                 "type": "http.response.start",
@@ -112,3 +112,9 @@ class Response:
         headers = headers or {}
         headers["location"] = quote(url, safe=":/%#?=@[]!$&'()*+,;")
         return cls(b"", headers=headers)
+
+    @classmethod
+    def method_not_allowed(
+        cls, data: DataType = None, headers: Optional[dict[str, str]] = None
+    ) -> Self:
+        return cls("Method Not Allowed" if data is None else data, 405, headers=headers)

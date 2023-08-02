@@ -8,6 +8,8 @@ from typing import (
     AsyncGenerator,
     Callable,
     Coroutine,
+    Generic,
+    Self,
     Type,
     TypeVar,
 )
@@ -17,6 +19,8 @@ from yarl import URL
 
 CoroT = TypeVar("CoroT", bound=Callable[..., Coroutine])
 GenT = TypeVar("GenT", bound=Callable[..., AsyncGenerator])
+ReturnT = TypeVar("ReturnT")
+FuncT = TypeVar("FuncT", bound=Callable)
 
 
 def _cached_property(func: Callable):
@@ -161,3 +165,34 @@ def parse_cookies(before: str, /) -> dict:
             name, value = "", chunk
         after[name.strip()] = unqoute(value.strip())
     return after
+
+
+class AsyncIteratorProxy(Generic[ReturnT]):
+    def __init__(
+        self,
+        coro: Callable[[], Coroutine[Any, Any, ReturnT]],
+        *,
+        exit_exception: Type[Exception] | None = None,
+    ) -> None:
+        self._coro = coro
+        self._exit_exception = exit_exception
+
+    async def __aiter__(self) -> Self:
+        return self
+
+    def __anext__(self) -> Coroutine[Any, Any, ReturnT]:
+        if self._exit_exception is None:
+            return self._coro()
+        else:
+            try:
+                return self._coro()
+            except self._exit_exception:
+                raise StopAsyncIteration
+
+
+def set_property(name: str, value: Any) -> Callable[[FuncT], FuncT]:
+    def decorator(func: FuncT) -> FuncT:
+        setattr(func, name, value)
+        return func
+
+    return decorator

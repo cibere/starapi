@@ -8,7 +8,7 @@ from .utils import MISSING
 
 if TYPE_CHECKING:
     from .app import Application
-    from .requests import Request
+    from .requests import BaseRequest
     from .responses import Response
 
 
@@ -51,7 +51,7 @@ class Group:
     def routes(self) -> list[RouteType]:
         return self.__routes__
 
-    async def group_check(self, request: Request) -> Response | None:
+    async def group_check(self, request: BaseRequest) -> Response | None:
         """
         Group check. Before routes in this group are executed, this gets called.
         If a response is returned, the route will not be executed and the response will be sent.
@@ -70,5 +70,5 @@ class Group:
 
         ...
 
-    async def on_error(self, request: Request, exec: Exception) -> None:
+    async def on_error(self, request: BaseRequest, exec: Exception) -> None:
         ...

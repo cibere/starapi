@@ -5,10 +5,13 @@ from typing import (
     TYPE_CHECKING,
     Any,
     AsyncGenerator,
+    Callable,
     Generic,
     Literal,
+    Self,
     Sequence,
     TypeVar,
+    overload,
 )
 from urllib.parse import parse_qs
 
@@ -16,8 +19,17 @@ from starlette.datastructures import FormData
 from starlette.formparsers import FormParser, MultiPartException, MultiPartParser
 from yarl import URL
 
-from .errors import ClientDisconnect, HTTPException
+from .enums import WSCodes, WSMessageType, WSState
+from .errors import (
+    ClientDisconnect,
+    HTTPException,
+    UnexpectedASGIMessageType,
+    WebSocketDisconnect,
+    WebSocketDisconnected,
+)
 from .utils import (
+    MISSING,
+    AsyncIteratorProxy,
     cached_coro,
     cached_gen,
     cached_property,
@@ -31,11 +43,12 @@ except ModuleNotFoundError:
     parse_options_header = None
 
 if TYPE_CHECKING:
-    from ._types import Receive, Scope, Send
+    from ._types import Receive, Scope, Send, WSMessage
     from .app import Application
     from .routing import Route
 
     AppT = TypeVar("AppT", bound=Application)
+    FuncT = TypeVar("FuncT", bound=Callable)
 else:
     AppT = TypeVar("AppT")
 
@@ -48,11 +61,24 @@ class Address:
         self.port: int = data[1]
 
 
-class Request(Generic[AppT]):
+def _ws_must_be_connected(func: FuncT) -> FuncT:
+    def decorated(*args, **kwargs):
+        ws: WebSocket = args[0]
+        if ws.application_state != WSState.connected:
+            raise WebSocketDisconnected()
+        return func(*args, **kwargs)
+
+    return decorated  # type: ignore
+
+
+class BaseRequest(Generic[AppT]):
+    _type: str
+
     def __init__(self, scope: Scope, receive: Receive, send: Send) -> None:
         self._scope = scope
         self._receive = receive
         self._send = send
+        self._type = scope["type"]
 
         self._stream_consumed = False
 
@@ -73,16 +99,8 @@ class Request(Generic[AppT]):
         return self._scope["http_version"]
 
     @property
-    def method(self) -> str:
-        return self._scope["method"]
-
-    @property
     def path_params(self) -> dict[str, Any]:
         return self._scope.get("path_params", {})
-
-    @property
-    def is_disconnected(self) -> bool:
-        return self._is_disconnected
 
     @cached_property
     def url(self) -> URL:
@@ -117,6 +135,192 @@ class Request(Generic[AppT]):
     @cached_property
     def headers(self) -> dict[str, str]:
         return {name.decode(): value.decode() for name, value in self._scope["headers"]}
+
+
+class WebSocket(BaseRequest):
+    _type: Literal["websocket"]
+
+    def __init__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        super().__init__(scope, receive, send)
+
+        self.client_state = WSState.connecting
+        self.application_state = WSState.connecting
+
+    async def receive(self) -> WSMessage:
+        match self.client_state:
+            case WSState.connecting:
+                msg = await self._receive()
+                if msg["type"] != WSMessageType.connect.value:
+                    raise UnexpectedASGIMessageType(WSMessageType.connect, msg["type"])
+                self.client_state = WSState.connected
+                return msg
+            case WSState.connected:
+                msg = await self._receive()
+                typ = WSMessageType(msg["type"])
+                if typ == WSMessageType.disconnect:
+                    self.client_state = WSState.disconnected
+                elif typ not in (
+                    WSMessageType.disconnect,
+                    WSMessageType.receive,
+                ):
+                    raise UnexpectedASGIMessageType(
+                        [WSMessageType.disconnect, WSMessageType.receive], typ.value
+                    )
+                return msg  # type: ignore
+            case other:
+                raise RuntimeError("Disconnect message has already been received")
+
+    async def send(self, msg: WSMessage) -> None:
+        match self.application_state:
+            case WSState.connecting:
+                match WSMessageType(msg["type"]):
+                    case WSMessageType.accept:
+                        self.application_state = WSState.connected
+                    case WSMessageType.close:
+                        self.application_state = WSState.disconnected
+                    case other:
+                        raise UnexpectedASGIMessageType(
+                            [WSMessageType.close, WSMessageType.accept], msg["type"]
+                        )
+                await self._send(msg)
+            case WSState.connected:
+                match WSMessageType(msg["type"]):
+                    case WSMessageType.close:
+                        self.application_state = WSState.disconnected
+                    case WSMessageType.send:
+                        pass
+                    case other:
+                        raise UnexpectedASGIMessageType(
+                            [WSMessageType.close, WSMessageType.send], other.value
+                        )
+                await self._send(msg)
+            case other:
+                raise RuntimeError("Websocket has already been closed")
+
+    async def accept(
+        self,
+        subprotocol: str | None = None,
+        headers: dict[str, str] = MISSING,
+    ) -> None:
+        if headers is MISSING:
+            headers = {}
+        raw_headers: list[tuple[bytes, bytes]] = [
+            (k.encode(), v.encode()) for k, v in headers.items()
+        ]
+
+        if self.client_state == WSState.connecting:
+            await self.receive()
+
+        await self.send(
+            {
+                "type": "websocket.accept",
+                "subprotocol": subprotocol,
+                "headers": raw_headers,
+            }
+        )
+
+    def _raise_on_disconnect(self, message: WSMessage) -> None:
+        if message["type"] == "websocket.disconnect":
+            raise WebSocketDisconnect(message["code"])
+
+    @_ws_must_be_connected
+    async def receive_text(self) -> str:
+        while 1:
+            msg = await self.receive()
+            assert msg["type"] == "websocket.send"
+            self._raise_on_disconnect(msg)
+            try:
+                return msg["text"]  # type: ignore
+            except KeyError:
+                ...
+        raise RuntimeError("How did we get here")
+
+    @_ws_must_be_connected
+    async def receive_bytes(self) -> bytes:
+        while 1:
+            msg = await self.receive()
+            assert msg["type"] == "websocket.send"
+            self._raise_on_disconnect(msg)
+            try:
+                return msg["bytes"]  # type: ignore
+            except KeyError:
+                ...
+        raise RuntimeError("How did we get here")
+
+    @_ws_must_be_connected
+    async def receive_json(self) -> dict | list:
+        while 1:
+            msg = await self.receive()
+            assert msg["type"] == "websocket.send"
+            self._raise_on_disconnect(msg)
+            try:
+                return json.loads(msg["text"])  # type: ignore
+            except KeyError:
+                ...
+        raise RuntimeError("How did we get here")
+
+    @overload
+    async def iter(self, encoding: Literal["bytes"]) -> AsyncIteratorProxy[bytes]:
+        ...
+
+    @overload
+    async def iter(self, encoding: Literal["text"]) -> AsyncIteratorProxy[str]:
+        ...
+
+    @overload
+    async def iter(self, encoding: Literal["json"]) -> AsyncIteratorProxy[dict | list]:
+        ...
+
+    async def iter(
+        self, encoding: Literal["bytes", "text", "json"]
+    ) -> AsyncIteratorProxy:
+        match encoding:
+            case "bytes":
+                coro = self.receive_bytes
+            case "text":
+                coro = self.receive_text
+            case "json":
+                coro = self.receive_json
+            case other:
+                raise ValueError(
+                    f"Expected 'bytes', 'text', or 'json' for encoding. Received {other!r} instead"
+                )
+        return AsyncIteratorProxy(coro)
+
+    async def send_text(self, content: str) -> None:
+        await self.send({"type": "websocket.send", "text": content})
+
+    async def send_bytes(self, content: bytes) -> None:
+        await self.send({"type": "websocket.send", "bytes": content})
+
+    async def send_json(self, data: list | dict) -> None:
+        text = json.dumps(data, separators=(",", ":"))
+        await self.send({"type": "websocket.send", "text": text})
+
+    async def close(self, code: WSCodes = MISSING, reason: str = MISSING) -> None:
+        await self.send(
+            {
+                "type": "websocket.close",
+                "code": (code or WSCodes.NORMAL_CLOSURE).value,
+                "reason": reason or "",
+            }
+        )
+
+    @classmethod
+    def _from_request(cls, request: Request) -> Self:
+        return cls(request._scope, request._receive, request._send)
+
+
+class Request(BaseRequest):
+    _type: Literal["http"]
+
+    @property
+    def is_disconnected(self) -> bool:
+        return self._is_disconnected
+
+    @property
+    def method(self) -> str:
+        return self._scope["method"]
 
     @cached_gen
     async def stream(self) -> AsyncGenerator[bytes, None]:

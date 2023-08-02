@@ -1,5 +1,7 @@
 import http
 
+from .enums import WSMessageType
+
 __all__ = (
     "StarApiException",
     "GroupException",
@@ -8,6 +10,13 @@ __all__ = (
     "UvicornNotInstalled",
     "ClientException",
     "ClientDisconnect",
+    "ASGIException",
+    "UnexpectedASGIMessageType",
+    "WebSocketException",
+    "WebSocketDisconnected",
+    "WebSocketDisconnect",
+    "RoutingException",
+    "InvalidWebSocketRoute",
 )
 
 
@@ -63,3 +72,45 @@ class HTTPException(StarApiException):
     def __repr__(self) -> str:
         class_name = self.__class__.__name__
         return f"{class_name}(status_code={self.status_code!r}, detail={self.detail!r})"
+
+
+class ASGIException(StarApiException):
+    ...
+
+
+class UnexpectedASGIMessageType(ASGIException):
+    def __init__(
+        self, expected: list[str | WSMessageType] | str | WSMessageType, received: str
+    ) -> None:
+        if isinstance(expected, str):
+            expected = [expected]
+        elif isinstance(expected, WSMessageType):
+            expected = [expected.value]
+
+        e = [f"{ex!r}" if isinstance(ex, str) else f"{ex.value!r}" for ex in expected]
+        super().__init__(
+            f"Expected ASGI message type {' or '.join(e)},"
+            f"received {received!r} instead."
+        )
+
+
+class WebSocketException(StarApiException):
+    ...
+
+
+class WebSocketDisconnected(WebSocketException):
+    def __init__(self) -> None:
+        super().__init__("WebSocket is already disconnected")
+
+
+class WebSocketDisconnect(WebSocketException):
+    def __init__(self, code: int) -> None:
+        super().__init__(f"WebSocket has disconnected with code {code}")
+
+
+class RoutingException(StarApiException):
+    ...
+
+
+class InvalidWebSocketRoute(RoutingException):
+    ...
