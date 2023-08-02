@@ -13,7 +13,6 @@ from typing import (
     Type,
     TypeVar,
 )
-from urllib.parse import unquote
 
 from yarl import URL
 

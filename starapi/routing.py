@@ -5,10 +5,7 @@ import re
 import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Coroutine
-from typing import TYPE_CHECKING, Any, Generic, Literal, Self, Type, TypeAlias
-
-# from starlette.routing import compile_path
-from yarl import URL
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeAlias
 
 from ._types import (
     Connection,
@@ -22,7 +19,7 @@ from ._types import (
 )
 from .converters import builtin_converters
 from .enums import Match, WSCodes, WSMessageType
-from .requests import Request, WebSocket
+from .requests import WebSocket
 from .responses import Response
 from .utils import MISSING, set_property
 
