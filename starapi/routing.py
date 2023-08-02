@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from .state import State
 
 
-__all__ = ("route", "Route")
+__all__ = ("route", "Route", "WebSocketRoute")
 
 RouteType: TypeAlias = "Route | WebSocketRoute"
 ResponseType: TypeAlias = Coroutine[Any, Any, Response]
