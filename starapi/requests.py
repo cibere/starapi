@@ -52,7 +52,7 @@ if TYPE_CHECKING:
 else:
     AppT = TypeVar("AppT")
 
-__all__ = ("Request",)
+__all__ = ("Request", "WebSocket")
 
 
 class Address:
