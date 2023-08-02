@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from ._types import Lifespan
     from .app import Application
     from .groups import Group
-    from .requests import Request
+    from .requests import BaseRequest
 
 
 __all__ = ("State",)
@@ -23,12 +23,12 @@ class State:
 
         self.groups: list[Group] = []
 
-    async def _handle_route_error(self, request: Request, error: Exception) -> None:
+    async def _handle_route_error(self, request: BaseRequest, error: Exception) -> None:
         route = request.endpoint
         assert route is not None
         if route._group is not None:
             await route._group.on_error(request, error)
         await route._state.app.on_error(request, error)
 
-    def on_route_error(self, request: Request, error: Exception) -> None:
+    def on_route_error(self, request: BaseRequest, error: Exception) -> None:
         asyncio.create_task(self._handle_route_error(request, error))

@@ -1,16 +1,21 @@
+from __future__ import annotations
+
 from typing import (
     TYPE_CHECKING,
     Any,
     AsyncContextManager,
     Callable,
     Coroutine,
+    Literal,
     Mapping,
     MutableMapping,
+    TypeAlias,
+    TypedDict,
     TypeVar,
 )
 
 from .middleware import BaseMiddleware
-from .requests import Request
+from .requests import Request, WebSocket
 
 if TYPE_CHECKING:
     from typing_extensions import TypeVar
@@ -25,12 +30,20 @@ else:
     GroupT = TypeVar("GroupT", bound="Group")
 
 AppType = TypeVar("AppType")
+Connection = Request | WebSocket
 
 Scope = MutableMapping[str, Any]
-Message = MutableMapping[str, Any]
 
-Receive = Callable[[], Coroutine[Any, Any, Message]]
-Send = Callable[[Message], Coroutine[Any, Any, None]]
+Receive: TypeAlias = """
+Callable[
+    [], Coroutine[Any, Any, WSMessage | HTTPMessage | LifespanMessage]
+]
+"""
+Send: TypeAlias = """
+Callable[
+    [WSMessage | HTTPMessage | LifespanMessage], Coroutine[Any, Any, None]
+]
+"""
 
 ASGIApp = Callable[[Scope, Receive, Send], Coroutine[Any, Any, None]]
 
@@ -38,6 +51,84 @@ StatelessLifespan = Callable[[AppType], AsyncContextManager[None]]
 StatefulLifespan = Callable[[AppType], AsyncContextManager[Mapping[str, Any]]]
 Lifespan = StatelessLifespan[AppType] | StatefulLifespan[AppType]
 
-Middleware = BaseMiddleware | Callable[[Request], Coroutine[Any, Any, Any]]
+Middleware = BaseMiddleware | Callable[[Request | WebSocket], Coroutine[Any, Any, Any]]
 
 Converter = Callable[[str], Any]
+Headers = list[tuple[bytes, bytes]]
+
+
+class WSCloseMessage(TypedDict):
+    type: Literal["websocket.close"]
+    code: int
+    reason: str
+
+
+class WSAcceptMessage(TypedDict):
+    type: Literal["websocket.accept"]
+    subprotocol: str | None
+    headers: Headers
+
+
+class _WSSendDataMessage(TypedDict):
+    type: Literal["websocket.send"]
+
+
+class WSSendTextMessage(_WSSendDataMessage):
+    text: str
+
+
+class WSSendBytesMessage(_WSSendDataMessage):
+    bytes: bytes
+
+
+class WSSendJSONMessage(_WSSendDataMessage):
+    json: dict | list
+
+
+WSMessage: TypeAlias = (
+    WSCloseMessage
+    | WSAcceptMessage
+    | WSSendTextMessage
+    | WSSendBytesMessage
+    | WSSendJSONMessage
+)
+
+
+class StartResponseMessage(TypedDict):
+    type: Literal["http.response.start"]
+    status: int
+    headers: Headers
+
+
+class BodyResponseMessage(TypedDict):
+    type: Literal["http.response.body"]
+    body: bytes
+
+
+HTTPMessage: TypeAlias = StartResponseMessage | BodyResponseMessage
+
+
+class LifespanStartupCompleteMessage(TypedDict):
+    type: Literal["lifespan.startup.complete"]
+
+
+class LifespanShutdownCompleteMessage(TypedDict):
+    type: Literal["lifespan.shutdown.complete"]
+
+
+class LifespanStartupFailed(TypedDict):
+    type: Literal["lifespan.startup.failed"]
+    message: str
+
+
+class LifespanShutdownFailed(TypedDict):
+    type: Literal["lifespan.shutdown.failed"]
+    message: str
+
+
+LifespanMessage: TypeAlias = (
+    LifespanStartupCompleteMessage
+    | LifespanShutdownCompleteMessage
+    | LifespanStartupFailed
+    | LifespanShutdownFailed
+)

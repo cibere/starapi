@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Type, TypeVar, overload
 
-from .errors import GroupAlreadyAdded, UvicornNotInstalled
-from .requests import Request
-from .routing import HTTPRouteCallback, Route, RouteType
+from .errors import GroupAlreadyAdded, InvalidWebSocketRoute, UvicornNotInstalled
+from .requests import Request, WebSocket
+from .routing import (
+    HTTPRouteCallback,
+    Route,
+    RouteType,
+    WebSocketRoute,
+    WSRouteCallback,
+)
 from .state import State
 from .utils import MISSING
 
@@ -17,6 +23,7 @@ except ImportError:
 if TYPE_CHECKING:
     from ._types import Lifespan, Middleware, Receive, Scope, Send
     from .groups import Group
+    from .requests import BaseRequest
     from .responses import Response
 
     HandleStatusFunc = Callable[[Request, int], Coroutine[Any, Any, Response]]
@@ -24,6 +31,7 @@ if TYPE_CHECKING:
         "HandleStatusFuncT",
         bound=HandleStatusFunc,
     )
+    WSRouteT = TypeVar("WSRouteT", bound=WebSocketRoute)
 
 __all__ = ("Application",)
 
@@ -94,8 +102,14 @@ class Application:
                 await self._state.router(request)
             case "lifespan":
                 await self._state.router.lifespan(scope, receive, send)
+            case "websocket":
+                ws = WebSocket(scope, receive, send)
+
+                for middleware in self._middleware:
+                    await middleware(ws)
+                await self._state.router(ws)
             case other:
-                raise RuntimeError(f"Unknown scope tyoe: {other!r}")
+                raise RuntimeError(f"Unknown scope type: {other!r}")
 
     def add_route(self, route: RouteType, /) -> None:
         route._state = self._state
@@ -115,6 +129,53 @@ class Application:
 
         return decorator
 
+    @overload
+    def ws(
+        self,
+        func: Type[WSRouteT],
+        /,
+    ) -> WSRouteT:
+        ...
+
+    @overload
+    def ws(
+        self,
+        /,
+        *,
+        path: str,
+    ) -> Callable[[WSRouteCallback], WebSocketRoute]:
+        ...
+
+    def ws(
+        self,
+        func: Type[WSRouteT] = MISSING,
+        /,
+        *,
+        path: str = MISSING,
+    ) -> Callable[[WSRouteCallback], WebSocketRoute] | WSRouteT:
+        try:
+            is_subclassed_route = issubclass(func, WebSocketRoute)
+        except TypeError:
+            is_subclassed_route = False
+        if is_subclassed_route:
+            try:
+                route = func()  # type: ignore
+            except Exception:
+                raise InvalidWebSocketRoute(
+                    "When using the 'Application.ws' decorator with a subclassed route, the __init__ should take 0 arguments"
+                )
+            else:
+                self.add_route(route)
+            return route
+
+        def decorator(callback: WSRouteCallback) -> WebSocketRoute:
+            route = WebSocketRoute(path=path)
+            route.on_connect = callback  # type: ignore
+            self.add_route(route)
+            return route
+
+        return decorator
+
     def run(self, host: str = "127.0.0.1", port: int = 8000, **kwargs) -> None:
         if uvicorn is None:
             raise UvicornNotInstalled()
@@ -127,7 +188,7 @@ class Application:
         server = uvicorn.Server(uvicorn.Config(self, host=host, port=port, **kwargs))
         await server.serve()
 
-    async def on_error(self, request: Request, error: Exception):
+    async def on_error(self, request: BaseRequest, error: Exception):
         raise error
 
     async def on_request(self, request: Request):

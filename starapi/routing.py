@@ -1,21 +1,30 @@
 from __future__ import annotations
 
+import json
 import re
 import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Coroutine
-from re import L, Pattern
-from typing import TYPE_CHECKING, Any, Generic, Literal, Self, Type, TypeAlias, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Literal, Self, Type, TypeAlias
 
 # from starlette.routing import compile_path
 from yarl import URL
 
-from ._types import Converter, GroupT, Lifespan, Receive, Scope, Send
+from ._types import (
+    Connection,
+    Converter,
+    GroupT,
+    Lifespan,
+    Receive,
+    Scope,
+    Send,
+    WSMessage,
+)
 from .converters import builtin_converters
-from .enums import Match
-from .requests import Request
+from .enums import Match, WSCodes, WSMessageType
+from .requests import Request, WebSocket
 from .responses import Response
-from .utils import MISSING
+from .utils import MISSING, set_property
 
 if TYPE_CHECKING:
     from .state import State
@@ -23,17 +32,18 @@ if TYPE_CHECKING:
 
 __all__ = ("route", "Route")
 
-RouteType: TypeAlias = "Route"
+RouteType: TypeAlias = "Route | WebSocketRoute"
 ResponseType: TypeAlias = Coroutine[Any, Any, Response]
 HTTPRouteCallback: TypeAlias = Callable[..., ResponseType]
-WSRouteCallback: TypeAlias = "WebSocketRoute"
+WSRouteCallback: TypeAlias = Callable[[WebSocket], Coroutine[Any, Any, None]]
+
 RouteDecoCallbackType: TypeAlias = Callable[
     [HTTPRouteCallback],
     RouteType,
 ]
 
 PARAM_REGEX = re.compile(
-    r"{(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)(?P<type>:[a-zA-Z_][a-zA-Z0-9_]*)?}"
+    r"{(?P<name>[a-zA-Z_][a-zA-Z0-9_]*):(?P<type>[a-zA-Z_-][a-zA-Z0-9_-]*)?}"
 )
 
 
@@ -87,15 +97,21 @@ class BaseRoute(ABC, Generic[GroupT]):
         for endpoint in self.path.split("/"):
             convertor = None
             name = None
-            regex = r".*"
+            regex = re.escape(endpoint)
 
             if data := PARAM_REGEX.fullmatch(endpoint):
-                regex, convertor = builtin_converters.get(data["type"], (r".*", None))
+                regex, convertor = builtin_converters.get(data["type"], (regex, None))
                 name = data["name"]
 
             convertor = convertor or str
             path.append((regex, convertor, name))
+
+        path.append(("", str, None))
+
         self._path_data = path
+        print(self.path)
+        print(self._path_data)
+        print("-" * 20)
 
 
 class Route(BaseRoute):
@@ -119,8 +135,18 @@ class Route(BaseRoute):
     def methods(self) -> list[str]:
         return self._methods
 
-    def _match(self, request: Request) -> bool:
+    def _match(self, request: Connection) -> bool:
+        if request._type != "http":
+            return False
+
         client_path = request._scope["path"].split("/")
+
+        print("-" * 20)
+        print(f"{self.path}")
+        print(client_path)
+        print(self._path_data)
+        print("-" * 20)
+
         if len(client_path) != len(self._path_data):
             return False
 
@@ -130,11 +156,19 @@ class Route(BaseRoute):
             regex, convertor, name = server_endpoint
             if not re.fullmatch(regex, client_endpoint):
                 return False
-            params[name] = convertor(client_endpoint)
+            try:
+                params[name] = convertor(client_endpoint)
+            except ValueError:
+                return False
         request._scope["path_params"] = params
         return True
 
-    async def __call__(self, request: Request) -> None:
+    async def __call__(self, request: Connection) -> None:
+        assert request._type == "http"
+
+        if request.method not in self.methods:
+            return await Response.method_not_allowed()(request)
+
         args = []
 
         response = None
@@ -160,6 +194,8 @@ class Route(BaseRoute):
 
 
 class WebSocketRoute(BaseRoute):
+    encoding: Literal["text", "json", "bytes"] = "text"
+
     def __init__(
         self,
         *,
@@ -168,8 +204,18 @@ class WebSocketRoute(BaseRoute):
     ) -> None:
         super().__init__(path=path, prefix=prefix)
 
-    def _match(self, request: Request) -> bool:
-        client_path = request._scope["path"].split("/")
+    def _match(self, ws: Connection) -> bool:
+        if ws._type != "websocket":
+            return False
+
+        client_path = ws._scope["path"].split("/")
+
+        print("-" * 20)
+        print(f"{self.path}")
+        print(client_path)
+        print(self._path_data)
+        print("-" * 20)
+
         if len(client_path) != len(self._path_data):
             return False
 
@@ -179,33 +225,82 @@ class WebSocketRoute(BaseRoute):
             regex, convertor, name = server_endpoint
             if not re.fullmatch(regex, client_endpoint):
                 return False
-            params[name] = convertor(client_endpoint)
-        request._scope["path_params"] = params
+            try:
+                params[name] = convertor(client_endpoint)
+            except ValueError:
+                return False
+        ws._scope["path_params"] = params
         return True
 
-    async def __call__(self, request: Request) -> None:
-        args = []
+    async def __call__(self, ws: Connection) -> None:
+        assert ws._type == "websocket"
 
-        response = None
-        if self._group is not None:
-            args.append(self._group)
+        try:
+            await self.on_connect(ws)
+        except Exception as e:
+            self._state.on_route_error(ws, e)
+            await self.on_disconnect(ws, WSCodes.INTERNAL_ERROR)
 
-            try:
-                response = await self._group.group_check(request)
-            except Exception as e:
-                self._state.on_route_error(request, e)
-                response = Response.internal()
+        if getattr(self.on_receive, "__starapi_original__", False) is True:
+            return
 
-        if response is None:
-            args.append(request)
+        close_code = WSCodes.NORMAL_CLOSURE
+        try:
+            while 1:
+                msg = await ws.receive()
+                match WSMessageType(msg["type"]):
+                    case WSMessageType.receive:
+                        await self._dispatch_receive(ws, msg)
+                    case WSMessageType.disconnect:
+                        code = msg.get("code", None)
+                        close_code = (
+                            WSCodes(code)
+                            if code is not None
+                            else WSCodes.NORMAL_CLOSURE
+                        )
+                        break
+        except Exception as e:
+            self._state.on_route_error(ws, e)
+            close_code = WSCodes.INTERNAL_ERROR
+        finally:
+            await self.on_disconnect(ws, close_code)
 
-            try:
-                response = await self._callback(*args)
-            except Exception as e:
-                self._state.on_route_error(request, e)
-                response = Response.internal()
+    async def _dispatch_receive(self, ws: WebSocket, msg: WSMessage) -> None:
+        match self.encoding:
+            case "bytes":
+                data = msg.get("bytes", None)
+            case "text":
+                data = msg.get("text", None)
+            case "json":
+                data = msg.get("text", msg.get("bytes"))
+                if data is not None:
+                    try:
+                        data = json.loads(data)
+                    except json.JSONDecodeError:
+                        await ws.close(WSCodes.UNSUPPORTED_DATA)
+                        raise RuntimeError("Malformed JSON data received")
 
-        await response(request)
+        if data is None:
+            await ws.close(code=WSCodes.UNSUPPORTED_DATA)
+
+            if "text" in msg:
+                x = "text"
+            elif "bytes" in msg:
+                x = "bytes"
+            else:
+                x = "nothing"
+            raise RuntimeError(f"Expected {self.encoding} ws message, received {x}.")
+        await self.on_receive(ws, data)  # type: ignore
+
+    async def on_connect(self, ws: WebSocket) -> None:
+        await ws.accept()
+
+    async def on_disconnect(self, ws: WebSocket, code: WSCodes) -> None:
+        ...
+
+    @set_property("__starapi_original__", True)
+    async def on_receive(self, ws: WebSocket, data: Any) -> None:
+        ...
 
 
 class RouteSelector:
@@ -278,13 +373,23 @@ class Router:
         else:
             await send({"type": "lifespan.shutdown.complete"})
 
-    async def __call__(self, request: Request) -> None:
+    async def __call__(self, request: Connection) -> None:
         assert request._scope["type"] in ("http", "websocket")
+
+        if not request._scope["path"].endswith("/"):
+            request._scope["path"] += "/"
 
         for route in self.routes:
             if route._match(request) is True:
-                if request.method not in route.methods:
-                    return await Response.method_not_allowed()(request)
                 return await route(request)
 
-        await Response.not_found()(request)
+        if isinstance(request, WebSocket):
+            await request.send(
+                {
+                    "type": "websocket.close",
+                    "code": WSCodes.NORMAL_CLOSURE.value,
+                    "reason": "",
+                }
+            )
+        else:
+            await Response.not_found()(request)
