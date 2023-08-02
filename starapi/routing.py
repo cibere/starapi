@@ -106,9 +106,6 @@ class BaseRoute(ABC, Generic[GroupT]):
         path.append(("", str, None))
 
         self._path_data = path
-        print(self.path)
-        print(self._path_data)
-        print("-" * 20)
 
 
 class Route(BaseRoute):
@@ -137,12 +134,6 @@ class Route(BaseRoute):
             return False
 
         client_path = request._scope["path"].split("/")
-
-        print("-" * 20)
-        print(f"{self.path}")
-        print(client_path)
-        print(self._path_data)
-        print("-" * 20)
 
         if len(client_path) != len(self._path_data):
             return False
@@ -206,12 +197,6 @@ class WebSocketRoute(BaseRoute):
             return False
 
         client_path = ws._scope["path"].split("/")
-
-        print("-" * 20)
-        print(f"{self.path}")
-        print(client_path)
-        print(self._path_data)
-        print("-" * 20)
 
         if len(client_path) != len(self._path_data):
             return False
