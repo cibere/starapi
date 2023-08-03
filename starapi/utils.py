@@ -203,6 +203,8 @@ def struct_to_openapi_spec(model: Type[Struct]) -> dict:
     return {
         "description": model.__doc__ or "",
         "content": {
-            "application/json": {"schema": {"$ref": f"#/components/{model.__name__}"}}
+            "application/json": {
+                "schema": {"$ref": f"#/components/schemas/{model.__name__}"}
+            }
         },
     }

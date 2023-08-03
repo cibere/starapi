@@ -44,11 +44,14 @@ class Application:
         debug: bool = MISSING,
         # cors: CORSSettings = MISSING,
         lf: Lifespan = MISSING,
+        title: str = MISSING,
+        api_version: str = MISSING,
     ) -> None:
         self._middleware: list[Middleware] = []  # [cors or CORSSettings()]
 
         self.debug = False if MISSING else debug
         self._state = State(self, lf)
+        self._api_info = title or "API Docs", api_version or "1.0.0"
 
     def add_group(self, group: Group, *, prefix: str = MISSING) -> None:
         """

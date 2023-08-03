@@ -219,12 +219,7 @@ class Route(BaseRoute):
 
         await response(request)
 
-    def _generate_openapi_spec(
-        self, op_id: str
-    ) -> tuple[list[Type[Struct]], dict] | tuple[None, None]:
-        if self.hidden is True:
-            return None, None
-
+    def _generate_openapi_spec(self, op_id: str) -> tuple[list[Type[Struct]], dict]:
         objects: list[Type[Struct]] = []
 
         def conv(model: Type[Struct]) -> dict:
@@ -436,6 +431,9 @@ class Router:
             if route._match(request) is True:
                 return await route(request)
 
+        if request._scope["path"] == "/openapi.json/":
+            return await self.handle_openapi_route(request)
+
         if isinstance(request, WebSocket):
             await request.send(
                 {
@@ -446,3 +444,15 @@ class Router:
             )
         else:
             await Response.not_found()(request)
+
+    async def handle_openapi_route(self, request: Connection) -> None:
+        assert request._type == "http"
+
+        if request.app._state.cached_api_docs is None:
+            request.app._state.construct_openapi_file(
+                title=request.app._api_info[0], version=request.app._api_info[1]
+            )
+        await Response(
+            request.app._state.cached_api_docs,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )(request)
