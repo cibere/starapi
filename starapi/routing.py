@@ -89,6 +89,16 @@ class BaseRoute(ABC, Generic[GroupT]):
         self._compile_path()
 
     @property
+    def clean_path(self) -> str:
+        x = []
+        for regex, _, name in self._path_data:
+            if name is None:
+                x.append(regex)
+            else:
+                x.append(f"{{{name}}}")
+        return "/".join(x)
+
+    @property
     def add_prefix(self) -> bool:
         return self._add_prefix
 

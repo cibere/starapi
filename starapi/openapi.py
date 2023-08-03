@@ -187,7 +187,7 @@ class OpenAPI:
             "tags": route._tags,
             "deprecated": route.deprecated,
             "parameters": [self.generate_param_spec(p) for p in route._parameters],
-            "operationId": f"{route.path}",
+            "operationId": f"{route.clean_path}",
         }
         if route._payload is not None:
             data["requestBody"] = conv(route._payload)
@@ -205,15 +205,15 @@ class OpenAPI:
 
         paths = self._current["paths"]
 
-        if route.path not in paths:
-            paths[route.path] = {}
+        if route.clean_path not in paths:
+            paths[route.clean_path] = {}
 
         models, route_data = self.generate_route_spec(route)
 
         self._objects_queue.extend(models)
         for method in route.methods:
-            route_data["operationId"] = f"[{method}]_{route.path}"
-            paths[route.path][method.lower()] = route_data
+            route_data["operationId"] = f"[{method}]_{route.clean_path}"
+            paths[route.clean_path][method.lower()] = route_data
 
     def save(self, fp: str, *, indent: int = 4) -> None:
         with open(fp, "w", encoding="utf-8") as f:
