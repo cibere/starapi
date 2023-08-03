@@ -10,10 +10,11 @@ from .routing import (
     RouteType,
     WebSocketRoute,
     WSRouteCallback,
+    _create_http_route,
 )
 from .server import BaseASGIApp
 from .state import State
-from .utils import MISSING
+from .utils import MISSING, mimmic
 
 if TYPE_CHECKING:
     from ._types import Lifespan, Middleware, Receive, Scope, Send
@@ -132,17 +133,18 @@ class Application(BaseASGIApp):
         route._compile_path()
         self._state.router.routes.append(route)
 
+    @mimmic(_create_http_route, keep_return=True)
     def route(
         self, path: str, methods: list[str] = MISSING, **kwargs
     ) -> Callable[[HTTPRouteCallback], RouteType,]:
         def decorator(callback: HTTPRouteCallback) -> Route:
             route = Route(
                 path=path,
-                callback=callback,
                 methods=methods or ["GET"],
                 prefix=False,
                 **kwargs,
             )
+            route.callback = callback
             self.add_route(route)
             return route
 

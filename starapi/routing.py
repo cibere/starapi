@@ -19,12 +19,12 @@ from ._types import (
     WSMessage,
 )
 from .converters import builtin_converters
-from .enums import Match, WSCodes, WSMessageType
+from .enums import WSCodes, WSMessageType
 from .errors import ConverterNotFound
 from .parameters import Parameter
 from .requests import WebSocket
 from .responses import Response
-from .utils import MISSING, set_property
+from .utils import MISSING, mimmic, set_property
 
 if TYPE_CHECKING:
     from msgspec import Struct
@@ -67,6 +67,9 @@ class BaseRoute(Generic[GroupT]):
     description: str
 
     def __init__(self, *, path: str, prefix: bool) -> None:
+        if not path.startswith("/"):
+            raise ValueError(f"Route paths must start with '/'")
+
         self.path = path
         self._add_prefix: bool = prefix
 
@@ -158,12 +161,13 @@ class BaseRoute(Generic[GroupT]):
 
 
 class Route(BaseRoute):
+    callback: HTTPRouteCallback
+
     def __init__(
         self,
-        *,
         path: str,
-        callback: HTTPRouteCallback,
-        methods: list[str],
+        *,
+        methods: list[str] = MISSING,
         prefix: bool = MISSING,
         responses: dict[int, Type[Struct]] = MISSING,
         query_parameters: list[Parameter] = MISSING,
@@ -175,9 +179,10 @@ class Route(BaseRoute):
         deprecated: bool = False,
         hidden: bool = False,
     ) -> None:
-        self._callback: HTTPRouteCallback = callback
         super().__init__(path=path, prefix=prefix)
-        self._methods = methods
+        self._methods = methods or []
+        if "GET" in self._methods and "HEAD" not in self._methods:
+            self._methods.append("HEAD")
 
         self.hidden = hidden
 
@@ -200,11 +205,7 @@ class Route(BaseRoute):
 
     @property
     def description(self) -> str:
-        return self._callback.__doc__ or ""
-
-    @property
-    def callback(self) -> HTTPRouteCallback:
-        return self._callback
+        return self.callback.__doc__ or ""
 
     @property
     def methods(self) -> list[str]:
@@ -240,7 +241,7 @@ class Route(BaseRoute):
             args.append(request)
 
             try:
-                response = await self._callback(*args)
+                response = await self.callback(*args)
             except Exception as e:
                 self._state.on_route_error(request, e)
                 response = Response.internal()
@@ -345,34 +346,58 @@ class WebSocketRoute(BaseRoute):
         ...
 
 
+def _create_http_route(
+    self: Any,
+    path: str,
+    *,
+    methods: list[str] = MISSING,
+    prefix: bool = MISSING,
+    responses: dict[int, Type[Struct]] = MISSING,
+    query_parameters: list[Parameter] = MISSING,
+    path_parameters: list[Parameter] = MISSING,
+    cookies: list[Parameter] = MISSING,
+    headers: list[Parameter] = MISSING,
+    tags: list[str] = MISSING,
+    payload: Type[Struct] = MISSING,
+    deprecated: bool = False,
+    hidden: bool = False,
+) -> Route:
+    ...
+
+
 class RouteSelector:
-    def __call__(
-        self,
-        path: str,
-        /,
-        *,
-        methods: list[str],
-        prefix: bool = ...,
-    ) -> RouteDecoCallbackType:
+    def __call__(self, *args, **kwargs) -> RouteDecoCallbackType:
+        methods = kwargs.pop("methods", [])
+        methods.append("GET")
+        methods.append("HEAD")
+        kwargs["methods"] = methods
+
+        if "prefix" not in kwargs:
+            kwargs["prefix"] = True
+
         def decorator(callback: HTTPRouteCallback) -> RouteType:
-            return Route(path=path, callback=callback, methods=methods, prefix=prefix)
+            route = Route(*args, **kwargs)
+            route.callback = callback
+            return route
 
         return decorator
 
-    def get(self, path: str, /, *, prefix: bool = True) -> RouteDecoCallbackType:
-        return self.__call__(path, methods=["GET"], prefix=prefix)
+    @staticmethod
+    def _quick_gen(method: str):
+        @mimmic(_create_http_route, keep_return=True)
+        def func(*args, **kwargs) -> RouteDecoCallbackType:
+            kwargs.setdefault("methods", [])
+            kwargs["methods"].append(method)
+            return RouteSelector.__call__(*args, **kwargs)
 
-    def post(self, path: str, /, *, prefix: bool = True) -> RouteDecoCallbackType:
-        return self.__call__(path, methods=["POST"], prefix=prefix)
+        return func
 
-    def put(self, path: str, /, *, prefix: bool = True) -> RouteDecoCallbackType:
-        return self.__call__(path, methods=["PUT"], prefix=prefix)
-
-    def delete(self, path: str, /, *, prefix: bool = True) -> RouteDecoCallbackType:
-        return self.__call__(path, methods=["DELETE"], prefix=prefix)
-
-    def patch(self, path: str, /, *, prefix: bool = True) -> RouteDecoCallbackType:
-        return self.__call__(path, methods=["PATCH"], prefix=prefix)
+    get = _quick_gen("GET")
+    post = _quick_gen("POST")
+    put = _quick_gen("PUT")
+    patch = _quick_gen("PATCH")
+    options = _quick_gen("OPTIONS")
+    head = _quick_gen("HEAD")
 
 
 route = RouteSelector()
