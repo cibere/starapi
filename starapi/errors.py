@@ -17,6 +17,9 @@ __all__ = (
     "WebSocketDisconnect",
     "RoutingException",
     "InvalidWebSocketRoute",
+    "ConverterException",
+    "ConverterAlreadyAdded",
+    "ConverterNotFound",
 )
 
 
@@ -114,3 +117,17 @@ class RoutingException(StarApiException):
 
 class InvalidWebSocketRoute(RoutingException):
     ...
+
+
+class ConverterException(StarApiException):
+    ...
+
+
+class ConverterAlreadyAdded(ConverterException):
+    def __init__(self, name: str) -> None:
+        super().__init__(f"A converter with the name {name!r} was already added.")
+
+
+class ConverterNotFound(ConverterException):
+    def __init__(self, name: str) -> None:
+        super().__init__(f"Converter {name!r} was not found")

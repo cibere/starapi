@@ -7,7 +7,6 @@ yes
 - Cors
 - Finish Removing starlette as a dep
   - Form Parsing
-- Custom Convertors
 - Use `BaseRoute._match` to reduce duplicated code in `Route._match` and `WebSocketRoute._match`
 - BaseRoute.clean_path
 - Rewrite path params to work via callback args

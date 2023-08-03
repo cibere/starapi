@@ -19,6 +19,7 @@ from ._types import (
 )
 from .converters import builtin_converters
 from .enums import Match, WSCodes, WSMessageType
+from .errors import ConverterNotFound
 from .parameters import Parameter
 from .requests import WebSocket
 from .responses import Response
@@ -86,7 +87,6 @@ class BaseRoute(ABC, Generic[GroupT]):
     @path.setter
     def path(self, new_path: str):
         self._path = new_path
-        self._compile_path()
 
     @property
     def clean_path(self) -> str:
@@ -103,6 +103,11 @@ class BaseRoute(ABC, Generic[GroupT]):
         return self._add_prefix
 
     def _compile_path(self) -> None:
+        try:
+            converters = self._state.converters
+        except AttributeError:
+            converters = builtin_converters
+
         path: list[tuple[str, Converter, str | None]] = []
 
         for endpoint in self.path.split("/"):
@@ -111,8 +116,10 @@ class BaseRoute(ABC, Generic[GroupT]):
             regex = re.escape(endpoint)
 
             if data := PARAM_REGEX.fullmatch(endpoint):
-                regex, convertor = builtin_converters.get(data["type"], (regex, None))
+                regex, convertor = converters.get(data["type"], (regex, None))
                 name = data["name"]
+                if convertor is None:
+                    raise ConverterNotFound(name)
 
             convertor = convertor or str
             path.append((regex, convertor, name))
