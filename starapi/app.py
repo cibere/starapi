@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Type, TypeVar, overload
 
-from .errors import GroupAlreadyAdded, InvalidWebSocketRoute, UvicornNotInstalled
+from .errors import GroupAlreadyAdded, InvalidWebSocketRoute
+
 from .requests import Request, WebSocket
 from .routing import (
     HTTPRouteCallback,
@@ -11,13 +12,10 @@ from .routing import (
     WebSocketRoute,
     WSRouteCallback,
 )
+
+from .server import BaseASGIApp
 from .state import State
 from .utils import MISSING
-
-try:
-    import uvicorn
-except ImportError:
-    uvicorn = None
 
 if TYPE_CHECKING:
     from ._types import Lifespan, Middleware, Receive, Scope, Send
@@ -36,7 +34,7 @@ if TYPE_CHECKING:
 __all__ = ("Application",)
 
 
-class Application:
+class Application(BaseASGIApp):
     _middleware: list[Middleware]
 
     def __init__(
@@ -179,18 +177,6 @@ class Application:
             return route
 
         return decorator
-
-    def run(self, host: str = "127.0.0.1", port: int = 8000, **kwargs) -> None:
-        if uvicorn is None:
-            raise UvicornNotInstalled()
-        uvicorn.run(self, host=host, port=port, **kwargs)
-
-    async def start(self, host: str = "127.0.0.1", port: int = 8000, **kwargs) -> None:
-        if uvicorn is None:
-            raise UvicornNotInstalled()
-
-        server = uvicorn.Server(uvicorn.Config(self, host=host, port=port, **kwargs))
-        await server.serve()
 
     async def on_error(self, request: BaseRequest, error: Exception):
         raise error
