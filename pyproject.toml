@@ -2,7 +2,6 @@
 authors = [{name = "cibere", email = "cibere.dev@gmail.com"}]
 dependencies = [
   "yarl",
-  "msgspec",
   "starlette",
 ]
 name = "starapi"
@@ -13,9 +12,11 @@ version = "0.0.1a"
 all = [
   "uvicorn[standard]",
   "python-multipart",
+  "msgspec",
 ]
 standard = [
   "uvicorn[standard]",
+  "msgspec",
 ]
 
 [project.urls]
