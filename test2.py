@@ -1,4 +1,26 @@
-import asyncio
+import inspect
+from typing import Type
+
+import msgspec
+from msgspec import _json_schema
+
+
+def convert_to_msgspec(typ: Type) -> msgspec.inspect.Type:
+    translator = msgspec.inspect._Translator([typ])
+    t, args, _ = msgspec.inspect._origin_args_metadata(typ)
+    return translator._translate_inner(t, args)
+
+
+def convert_to_openapi(typ: msgspec.inspect.Type) -> dict:
+    return _json_schema._to_schema(typ, {}, "#/$defs/{name}", False)
+
+
+first = convert_to_msgspec(tuple[bool, str, int])
+print(first)
+second = convert_to_openapi(first)
+print(second)
+
+"""import asyncio
 
 import aiohttp
 
@@ -26,3 +48,4 @@ async def test1():
 
 
 asyncio.run(test2())
+"""

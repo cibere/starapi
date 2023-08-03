@@ -28,7 +28,7 @@ class Parameter:
 
     def _to_openapi_spec(self, state: State) -> dict:
         schema = {"title": self.name.title()}
-        schema["type"] = state.find_openapi_spec_type(self.annotation, schema)
+        schema.update(state.convert_to_openapi_type(self.annotation))
         return {
             "required": self.required,
             "name": self.name,
