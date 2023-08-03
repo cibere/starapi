@@ -103,7 +103,8 @@ class BaseRoute(ABC, Generic[GroupT]):
             convertor = convertor or str
             path.append((regex, convertor, name))
 
-        path.append(("", str, None))
+        if path[-1][0] != "":
+            path.append(("", str, None))
 
         self._path_data = path
 

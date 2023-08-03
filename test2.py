@@ -1,28 +1,35 @@
-import asyncio
+from typing import Callable, Optional, ParamSpec, TypeVar
 
-import aiohttp
+import uvicorn
 
-
-async def test2():
-    async with aiohttp.ClientSession() as cs:
-        ws = await cs.ws_connect("ws://127.0.0.1:8000/test2")
-        print("Connected to test2")
-        await ws.send_json({"msg": "Hello"})
-        for i in range(20):
-            msg = f"Hola x{i + 1}"
-            await ws.send_str(msg)
-            print(f"Sent {msg}")
+T = TypeVar("T")
+P = ParamSpec("P")
+from starapi.server import BaseASGIApp
 
 
-async def test1():
-    async with aiohttp.ClientSession() as cs:
-        ws = await cs.ws_connect("ws://127.0.0.1:8000/test1")
-        print("Connected to test1")
-        await ws.send_json({"msg": "Hello"})
-        print("Sent")
-        print("-" * 50)
-        async for msg in ws:
-            print(msg.data)
+def take_annotation_from(
+    this: Callable[P, Optional[T]]
+) -> Callable[[Callable], Callable[P, Optional[T]]]:
+    def decorator(real_function: Callable) -> Callable[P, Optional[T]]:
+        def new_function(*args: P.args, **kwargs: P.kwargs) -> Optional[T]:
+            return real_function(*args, **kwargs)
+
+        return new_function
+
+    return decorator
 
 
-asyncio.run(test2())
+class SomeApp(BaseASGIApp):
+    @take_annotation_from(uvicorn.run)
+    def run(self, *args, **kwargs) -> None:
+        try:
+            import uvicorn
+        except ImportError:
+            raise RuntimeError(
+                "'uvicorn' must be installed to use the default 'run' method"
+            ) from None
+        else:
+            uvicorn.run(*args, **kwargs)
+
+
+SomeApp().run(host="127.0.0.1")

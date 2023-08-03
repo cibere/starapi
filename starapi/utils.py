@@ -9,9 +9,13 @@ from typing import (
     Callable,
     Coroutine,
     Generic,
+    Literal,
+    Optional,
+    ParamSpec,
     Self,
     Type,
     TypeVar,
+    overload,
 )
 
 from yarl import URL
@@ -19,7 +23,9 @@ from yarl import URL
 CoroT = TypeVar("CoroT", bound=Callable[..., Coroutine])
 GenT = TypeVar("GenT", bound=Callable[..., AsyncGenerator])
 ReturnT = TypeVar("ReturnT")
+Return2T = TypeVar("Return2T")
 FuncT = TypeVar("FuncT", bound=Callable)
+P = ParamSpec("P")
 
 
 def _cached_property(func: Callable):
@@ -193,5 +199,33 @@ def set_property(name: str, value: Any) -> Callable[[FuncT], FuncT]:
     def decorator(func: FuncT) -> FuncT:
         setattr(func, name, value)
         return func
+
+    return decorator
+
+
+@overload
+def mimmic(
+    this: Callable[P, Any], keep_return: Literal[True]
+) -> Callable[[Callable[..., Return2T]], Callable[P, Return2T]]:
+    ...
+
+
+@overload
+def mimmic(
+    this: Callable[P, Optional[ReturnT]]
+) -> Callable[[Callable], Callable[P, Optional[ReturnT]]]:
+    ...
+
+
+def mimmic(
+    this: Callable[P, Optional[ReturnT]],
+    keep_return: bool = False,
+) -> Callable[[Callable], Callable[P, Optional[ReturnT]]]:
+    def decorator(real_function: Callable) -> Callable[P, Optional[ReturnT]]:
+        @wraps(this)
+        def new_function(*args: P.args, **kwargs: P.kwargs) -> Optional[ReturnT]:
+            return real_function(*args, **kwargs)
+
+        return new_function
 
     return decorator
