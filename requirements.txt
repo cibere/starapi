@@ -1,6 +1,7 @@
-starlette
-uvicorn
-msgspec
-websockets
 yarl
+msgspec
+starlette
+
 python-multipart
+websockets
+uvicorn
