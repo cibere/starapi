@@ -1,35 +1,51 @@
-from typing import Callable, Optional, ParamSpec, TypeVar
+import inspect
+from typing import Type
 
-import uvicorn
-
-T = TypeVar("T")
-P = ParamSpec("P")
-from starapi.server import BaseASGIApp
+import msgspec
+from msgspec import _json_schema
 
 
-def take_annotation_from(
-    this: Callable[P, Optional[T]]
-) -> Callable[[Callable], Callable[P, Optional[T]]]:
-    def decorator(real_function: Callable) -> Callable[P, Optional[T]]:
-        def new_function(*args: P.args, **kwargs: P.kwargs) -> Optional[T]:
-            return real_function(*args, **kwargs)
-
-        return new_function
-
-    return decorator
+def convert_to_msgspec(typ: Type) -> msgspec.inspect.Type:
+    translator = msgspec.inspect._Translator([typ])
+    t, args, _ = msgspec.inspect._origin_args_metadata(typ)
+    return translator._translate_inner(t, args)
 
 
-class SomeApp(BaseASGIApp):
-    @take_annotation_from(uvicorn.run)
-    def run(self, *args, **kwargs) -> None:
-        try:
-            import uvicorn
-        except ImportError:
-            raise RuntimeError(
-                "'uvicorn' must be installed to use the default 'run' method"
-            ) from None
-        else:
-            uvicorn.run(*args, **kwargs)
+def convert_to_openapi(typ: msgspec.inspect.Type) -> dict:
+    return _json_schema._to_schema(typ, {}, "#/$defs/{name}", False)
 
 
-SomeApp().run(host="127.0.0.1")
+first = convert_to_msgspec(tuple[bool, str, int])
+print(first)
+second = convert_to_openapi(first)
+print(second)
+
+"""import asyncio
+
+import aiohttp
+
+
+async def test2():
+    async with aiohttp.ClientSession() as cs:
+        ws = await cs.ws_connect("ws://127.0.0.1:8000/test2")
+        print("Connected to test2")
+        await ws.send_json({"msg": "Hello"})
+        for i in range(20):
+            msg = f"Hola x{i + 1}"
+            await ws.send_str(msg)
+            print(f"Sent {msg}")
+
+
+async def test1():
+    async with aiohttp.ClientSession() as cs:
+        ws = await cs.ws_connect("ws://127.0.0.1:8000/test1")
+        print("Connected to test1")
+        await ws.send_json({"msg": "Hello"})
+        print("Sent")
+        print("-" * 50)
+        async for msg in ws:
+            print(msg.data)
+
+
+asyncio.run(test2())
+"""

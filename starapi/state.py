@@ -3,13 +3,14 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from .routing import Router
+from .routing import Route, Router
 from .utils import MISSING
 
 if TYPE_CHECKING:
     from ._types import Lifespan
     from .app import Application
     from .groups import Group
+    from .openapi import OpenAPI
     from .requests import BaseRequest
 
 
@@ -17,11 +18,17 @@ __all__ = ("State",)
 
 
 class State:
-    def __init__(self, app: Application, lifespan: Lifespan = MISSING):
+    docs: OpenAPI | None
+
+    def __init__(
+        self, app: Application, lifespan: Lifespan = MISSING, docs: OpenAPI = MISSING
+    ):
         self.app = app
         self.router = Router(lifespan=lifespan)
+        self.cached_api_docs: dict | None = None
 
         self.groups: list[Group] = []
+        self.docs = docs or None
 
     async def _handle_route_error(self, request: BaseRequest, error: Exception) -> None:
         route = request.endpoint
@@ -32,3 +39,15 @@ class State:
 
     def on_route_error(self, request: BaseRequest, error: Exception) -> None:
         asyncio.create_task(self._handle_route_error(request, error))
+
+    def get_docs(self) -> OpenAPI | None:
+        if self.docs is None:
+            return
+
+        if self.docs.is_populated is False:
+            for route in self.router.routes:
+                if isinstance(route, Route):
+                    self.docs.add_route(route)
+            self.docs._add_models_from_queue()
+
+        return self.docs

@@ -1,29 +1,34 @@
-from starapi import Application, Request, Response, Server
+from typing import Literal
 
-app1 = Application(debug=True)
-app2 = Application(debug=True)
+import msgspec
 
+from starapi import Application, OpenAPI, Parameter, Request, Response
 
-@app1.route("/")
-async def app1_index(request: Request) -> Response:
-    return Response.ok("Hello from app 1")
+# docs = OpenAPI(title="My API Docs", version="1.0.0")
 
-
-@app1.route("/test")
-async def app1_indexest(request: Request) -> Response:
-    return Response.ok("Hello from app 1 test")
+app = Application(debug=True)  # , docs=docs)
 
 
-@app2.route("/")
-async def app2_index(request: Request) -> Response:
-    return Response.ok("Hello from app 2")
+class ExamplePayload(msgspec.Struct):
+    youtube_url: str
+    delay: int
+    tags: list[str]
 
 
-if __name__ == "__main__":
-    server = Server()
-    server.register_app(app1, prefix="v1")
-    server.register_app(app2, prefix="v2")
+class ResponsePayload(msgspec.Struct):
+    status: bool
+    message: Literal["Successfully updated your profile"]
 
-    print(app1_index._path_data)
 
-    server.run()
+@app.route(
+    "/{id:int}",
+    path_parameters=[Parameter(required=True, name="id", type=int)],
+    methods=["POST"],
+    payload=ExamplePayload,
+    responses={200: ResponsePayload},
+)
+async def index2(request: Request) -> Response:
+    return Response(f"Hello {request.path_params['id']}")
+
+
+app.run()

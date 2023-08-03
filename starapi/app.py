@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Type, TypeVar, overload
 
 from .errors import GroupAlreadyAdded, InvalidWebSocketRoute
+
 from .requests import Request, WebSocket
 from .routing import (
     HTTPRouteCallback,
@@ -11,6 +12,7 @@ from .routing import (
     WebSocketRoute,
     WSRouteCallback,
 )
+
 from .server import BaseASGIApp
 from .state import State
 from .utils import MISSING
@@ -18,6 +20,7 @@ from .utils import MISSING
 if TYPE_CHECKING:
     from ._types import Lifespan, Middleware, Receive, Scope, Send
     from .groups import Group
+    from .openapi import OpenAPI
     from .requests import BaseRequest
     from .responses import Response
 
@@ -40,11 +43,12 @@ class Application(BaseASGIApp):
         debug: bool = MISSING,
         # cors: CORSSettings = MISSING,
         lf: Lifespan = MISSING,
+        docs: OpenAPI = MISSING,
     ) -> None:
         self._middleware: list[Middleware] = []  # [cors or CORSSettings()]
 
         self.debug = False if MISSING else debug
-        self._state = State(self, lf)
+        self._state = State(self, lf, docs)
 
     def add_group(self, group: Group, *, prefix: str = MISSING) -> None:
         """
@@ -111,13 +115,15 @@ class Application(BaseASGIApp):
         self._state.router.routes.append(route)
 
     def route(
-        self,
-        path: str,
-        methods: list[str] = MISSING,
+        self, path: str, methods: list[str] = MISSING, **kwargs
     ) -> Callable[[HTTPRouteCallback], RouteType,]:
         def decorator(callback: HTTPRouteCallback) -> Route:
             route = Route(
-                path=path, callback=callback, methods=methods or ["GET"], prefix=False
+                path=path,
+                callback=callback,
+                methods=methods or ["GET"],
+                prefix=False,
+                **kwargs,
             )
             self.add_route(route)
             return route
@@ -166,6 +172,7 @@ class Application(BaseASGIApp):
         def decorator(callback: WSRouteCallback) -> WebSocketRoute:
             route = WebSocketRoute(path=path)
             route.on_connect = callback  # type: ignore
+            route.__doc__ = callback.__doc__
             self.add_route(route)
             return route
 

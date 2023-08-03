@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from .app import Application
     from .groups import Group
 
-    AppT = TypeVar("AppT", bound=Application)
+    AppT = TypeVar("AppT", bound=Application, default=Application)
     GroupT = TypeVar("GroupT", bound=Group, covariant=True, default=Group)
 else:
     AppT = TypeVar("AppT")

@@ -5,7 +5,7 @@ import re
 import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Coroutine
-from typing import TYPE_CHECKING, Any, Generic, Literal, TypeAlias
+from typing import TYPE_CHECKING, Any, Generic, Literal, Type, TypeAlias
 
 from ._types import (
     Connection,
@@ -19,11 +19,14 @@ from ._types import (
 )
 from .converters import builtin_converters
 from .enums import Match, WSCodes, WSMessageType
+from .parameters import Parameter
 from .requests import WebSocket
 from .responses import Response
-from .utils import MISSING, set_property
+from .utils import MISSING, set_property, struct_to_openapi_spec
 
 if TYPE_CHECKING:
+    from msgspec import Struct
+
     from .state import State
 
 
@@ -59,6 +62,7 @@ class BaseRoute(ABC, Generic[GroupT]):
     _group: GroupT | None
     _state: State
     _path_data: list[tuple[str, Converter, str | None]]
+    description: str
 
     def __init__(self, *, path: str, prefix: bool) -> None:
         self.path = path
@@ -117,10 +121,42 @@ class Route(BaseRoute):
         callback: HTTPRouteCallback,
         methods: list[str],
         prefix: bool = MISSING,
+        responses: dict[int, Type[Struct]] = MISSING,
+        query_parameters: list[Parameter] = MISSING,
+        path_parameters: list[Parameter] = MISSING,
+        cookies: list[Parameter] = MISSING,
+        headers: list[Parameter] = MISSING,
+        tags: list[str] = MISSING,
+        payload: Type[Struct] = MISSING,
+        deprecated: bool = False,
+        hidden: bool = False,
     ) -> None:
         self._callback: HTTPRouteCallback = callback
         super().__init__(path=path, prefix=prefix)
         self._methods = methods
+
+        self.hidden = hidden
+
+        if hidden is False:
+            self._responses = responses or {}
+            self._tags = tags or []
+            self._payload: Type[Struct] | None = payload or None
+            self.deprecated = deprecated
+
+            self._parameters: list[Parameter] = []
+            for where, params in [
+                ("query", query_parameters),
+                ("header", headers),
+                ("cookie", cookies),
+                ("path", path_parameters),
+            ]:
+                for param in params or []:
+                    param.where = where
+                    self._parameters.append(param)
+
+    @property
+    def description(self) -> str:
+        return self._callback.__doc__ or ""
 
     @property
     def callback(self) -> HTTPRouteCallback:
@@ -157,6 +193,8 @@ class Route(BaseRoute):
 
         if request.method not in self.methods:
             return await Response.method_not_allowed()(request)
+
+        request._scope["endpoint"] = self
 
         args = []
 
@@ -215,8 +253,14 @@ class WebSocketRoute(BaseRoute):
         ws._scope["path_params"] = params
         return True
 
+    @property
+    def description(self) -> str:
+        return self.__doc__ or ""
+
     async def __call__(self, ws: Connection) -> None:
         assert ws._type == "websocket"
+
+        ws._scope["endpoint"] = self
 
         try:
             await self.on_connect(ws)
@@ -366,6 +410,10 @@ class Router:
             if route._match(request) is True:
                 return await route(request)
 
+        if request._scope["path"] == "/openapi.json/":
+            if await self.handle_openapi_route(request) is True:
+                return
+
         if isinstance(request, WebSocket):
             await request.send(
                 {
@@ -376,3 +424,17 @@ class Router:
             )
         else:
             await Response.not_found()(request)
+
+    async def handle_openapi_route(self, request: Connection) -> bool:
+        assert request._type == "http"
+
+        docs = request.app._state.get_docs()
+
+        if docs is None:
+            return False
+
+        await Response(
+            docs.current,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )(request)
+        return True
