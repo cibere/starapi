@@ -34,7 +34,7 @@ class CORSSettings(BaseMiddleware):
 
     def __call__(self, request: Request) -> Coroutine[Any, Any, Any]:
         return CORSMiddleware(
-            app=request.app,
+            app=request.app,  # type: ignore
             allow_origins=self.allow_origins,
             allow_methods=self.allow_methods,
             allow_headers=self.allow_headers,

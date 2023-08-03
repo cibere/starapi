@@ -1,4 +1,5 @@
 import json
+import sys
 from typing import Any, Dict, Optional
 
 from encoder import jsonable_encoder
@@ -205,7 +206,7 @@ def get_swagger_ui_oauth2_redirect_html() -> HTMLResponse:
 
 if __name__ == "__main__":
     resp = get_swagger_ui_html(
-        openapi_url="https://raw.githubusercontent.com/cibere/some-web-framework/feature-openapi/openapi.json?token=GHSAT0AAAAAACA3NG45PKT3AVTVBGKKA6YOZGK3CJQ",
+        openapi_url=sys.argv[1],
         title="My API",
     )
     with open("docs.html", "w", encoding="utf-8") as f:

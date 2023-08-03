@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from typing import (TYPE_CHECKING, Any, Callable, Coroutine, Type, TypeVar,
-                    overload)
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Type, TypeVar, overload
 
-from .errors import (GroupAlreadyAdded, InvalidWebSocketRoute,
-                     UvicornNotInstalled)
+from .errors import GroupAlreadyAdded, InvalidWebSocketRoute, UvicornNotInstalled
 from .requests import Request, WebSocket
-from .routing import (HTTPRouteCallback, Route, RouteType, WebSocketRoute,
-                      WSRouteCallback)
+from .routing import (
+    HTTPRouteCallback,
+    Route,
+    RouteType,
+    WebSocketRoute,
+    WSRouteCallback,
+)
 from .state import State
 from .utils import MISSING
 
@@ -112,13 +115,15 @@ class Application:
         self._state.router.routes.append(route)
 
     def route(
-        self,
-        path: str,
-        methods: list[str] = MISSING,
+        self, path: str, methods: list[str] = MISSING, **kwargs
     ) -> Callable[[HTTPRouteCallback], RouteType,]:
         def decorator(callback: HTTPRouteCallback) -> Route:
             route = Route(
-                path=path, callback=callback, methods=methods or ["GET"], prefix=False
+                path=path,
+                callback=callback,
+                methods=methods or ["GET"],
+                prefix=False,
+                **kwargs,
             )
             self.add_route(route)
             return route
@@ -167,6 +172,7 @@ class Application:
         def decorator(callback: WSRouteCallback) -> WebSocketRoute:
             route = WebSocketRoute(path=path)
             route.on_connect = callback  # type: ignore
+            route.__doc__ = callback.__doc__
             self.add_route(route)
             return route
 

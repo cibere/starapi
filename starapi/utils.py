@@ -44,6 +44,8 @@ def _cached_property(func: Callable):
 if TYPE_CHECKING:
     from functools import cached_property as cached_property
 
+    from msgspec import Struct
+
     from ._types import Scope
 else:
     cached_property = _cached_property
@@ -195,3 +197,12 @@ def set_property(name: str, value: Any) -> Callable[[FuncT], FuncT]:
         return func
 
     return decorator
+
+
+def struct_to_openapi_spec(model: Type[Struct]) -> dict:
+    return {
+        "description": model.__doc__ or "",
+        "content": {
+            "application/json": {"schema": {"$ref": f"#/components/{model.__name__}"}}
+        },
+    }

@@ -43,11 +43,13 @@ except ModuleNotFoundError:
     parse_options_header = None
 
 if TYPE_CHECKING:
+    from typing_extensions import TypeVar
+
     from ._types import Receive, Scope, Send, WSMessage
     from .app import Application
     from .routing import Route
 
-    AppT = TypeVar("AppT", bound=Application)
+    AppT = TypeVar("AppT", bound=Application, default=Application)
     FuncT = TypeVar("FuncT", bound=Callable)
 else:
     AppT = TypeVar("AppT")

@@ -1,0 +1,46 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "My API Docs", "version": "0.0.1" },
+  "paths": {
+    "/save": {},
+    "/": {
+      "GET": {
+        "description": "",
+        "summary": "",
+        "responses": {},
+        "tags": [],
+        "deprecated": false,
+        "parameters": [
+          {
+            "required": false,
+            "name": "name",
+            "in": "query",
+            "deprecated": false,
+            "schema": { "title": "Name", "type": "string" }
+          }
+        ],
+        "operationId": "[GET]_/"
+      }
+    },
+    "/{id:float}": {
+      "GET": {
+        "description": "",
+        "summary": "",
+        "responses": {},
+        "tags": [],
+        "deprecated": false,
+        "parameters": [
+          {
+            "required": true,
+            "name": "id",
+            "in": "path",
+            "deprecated": false,
+            "schema": { "title": "Id", "type": "double" }
+          }
+        ],
+        "operationId": "[GET]_/{id:float}"
+      }
+    }
+  },
+  "components": { "schemas": {} }
+}
