@@ -17,11 +17,36 @@ if TYPE_CHECKING:
     from .parameters import Parameter
     from .routing import Route
 
-__all__ = ("OpenAPI",)
+__all__ = ("OpenAPI", "Contact")
+
+
+class Contact:
+    def __init__(self, name: str, email: str, url: str) -> None:
+        self.name = name
+        self.email = email
+        self.url = url
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "email": self.email,
+            "url": self.url,
+        }
 
 
 class OpenAPI:
-    def __init__(self, *, title: str, version: str) -> None:
+    def __init__(
+        self,
+        *,
+        title: str,
+        version: str,
+        summary: str = MISSING,
+        description: str = MISSING,
+        TOS_url: str = MISSING,
+        license: str = MISSING,
+        contact: Contact = MISSING,
+        external_docs_link: str = MISSING,
+    ) -> None:
         if msgspec is MISSING:
             raise RuntimeError("'msgspec' must be installed for openapi doc generation")
 
@@ -32,11 +57,69 @@ class OpenAPI:
             "components": {"schemas": {}},
         }
 
-        self._title = title
-        self._version = version
+        self.title = title
+        self.version = version
+        self.summary = summary or None
+        self.description = description or None
+        self.TOS_url = TOS_url or None
+        self.license = license or None
+        self.external_docs_link = external_docs_link or None
+        self.contact = contact or None
 
         self._objects_queue: list[Type[Struct]] = []
         self._status: bool = False
+
+    @property
+    def contact(self) -> Contact | None:
+        return self._contact
+
+    @contact.setter
+    def contact(self, new: Contact | None):
+        self._contact = new
+
+        if new:
+            self._current["info"]["contact"] = new.to_dict()
+
+    @property
+    def description(self) -> str | None:
+        return self._description
+
+    @description.setter
+    def description(self, new: str | None):
+        self._description = new
+        self._current["info"]["description"] = new
+
+    @property
+    def TOS_url(self) -> str | None:
+        return self._TOS_url
+
+    @TOS_url.setter
+    def TOS_url(self, new: str | None):
+        self._TOS_url = new
+        self._current["info"]["termsOfService"] = new
+
+    @property
+    def license(self) -> str | None:
+        return self._license
+
+    @license.setter
+    def license(self, new: str | None):
+        self._license = new
+
+        if new:
+            self._current["info"]["license"] = {
+                "name": new,
+                "identifier": new.replace(" ", "-"),
+            }
+
+    @property
+    def summary(self) -> str | None:
+        return self._summary
+
+    @summary.setter
+    def summary(self, new: str | None):
+        self._summary = new
+        self._current["info"]["summary"] = new
 
     @property
     def is_populated(self) -> bool:
