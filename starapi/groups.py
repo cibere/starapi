@@ -38,11 +38,6 @@ class Group:
             route.path = f'{self.prefix.lower()}/{route.path.lstrip("/")}'
             self.__routes__.append(route)
 
-            """for method in route._methods:
-                method = method.lower()
-
-                setattr(member, method, member._callback)"""
-
     @property
     def name(self) -> str:
         return self.__class__.__name__.lower()
