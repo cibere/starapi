@@ -22,7 +22,7 @@ from .enums import Match, WSCodes, WSMessageType
 from .parameters import Parameter
 from .requests import WebSocket
 from .responses import Response
-from .utils import MISSING, set_property, struct_to_openapi_spec
+from .utils import MISSING, set_property
 
 if TYPE_CHECKING:
     from msgspec import Struct
