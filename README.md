@@ -12,3 +12,4 @@ yes
 - Rewrite path params to work via callback args
 - add the repr dunder to the objects (along with other dunder methods like `__eq__`)
 - make msgspec a optional dependency (maybe via moving openapi stuff to `openapi.py`)
+- jinja2 templating
