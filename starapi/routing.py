@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import re
 import traceback
-from abc import ABC, abstractmethod
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any, Generic, Literal, Type, TypeAlias
 
@@ -61,7 +60,7 @@ class _DefaultLifespan:
         ...
 
 
-class BaseRoute(ABC, Generic[GroupT]):
+class BaseRoute(Generic[GroupT]):
     _group: GroupT | None
     _state: State
     _path_data: list[tuple[str, Converter, str | None]]
@@ -73,10 +72,6 @@ class BaseRoute(ABC, Generic[GroupT]):
 
         self._group = None
         self._resolved = None
-
-    @abstractmethod
-    def _match(self, scope: Scope) -> tuple[Match, Scope]:
-        raise NotImplementedError()
 
     @property
     def group(self) -> GroupT | None:
@@ -130,6 +125,25 @@ class BaseRoute(ABC, Generic[GroupT]):
             path.append(("", str, None))
 
         self._path_data = path
+
+    def _match(self, con: Connection) -> bool:
+        client_path = con._scope["path"].split("/")
+
+        if len(client_path) != len(self._path_data):
+            return False
+
+        params = {}
+
+        for client_endpoint, server_endpoint in zip(client_path, self._path_data):
+            regex, convertor, name = server_endpoint
+            if not re.fullmatch(regex, client_endpoint):
+                return False
+            try:
+                params[name] = convertor(client_endpoint)
+            except ValueError:
+                return False
+        con._scope["path_params"] = params
+        return True
 
     def __repr__(self, extras: list = MISSING) -> str:
         extras = extras or []
@@ -200,23 +214,7 @@ class Route(BaseRoute):
         if request._type != "http":
             return False
 
-        client_path = request._scope["path"].split("/")
-
-        if len(client_path) != len(self._path_data):
-            return False
-
-        params = {}
-
-        for client_endpoint, server_endpoint in zip(client_path, self._path_data):
-            regex, convertor, name = server_endpoint
-            if not re.fullmatch(regex, client_endpoint):
-                return False
-            try:
-                params[name] = convertor(client_endpoint)
-            except ValueError:
-                return False
-        request._scope["path_params"] = params
-        return True
+        return super()._match(request)
 
     async def __call__(self, request: Connection) -> None:
         assert request._type == "http"
@@ -268,23 +266,7 @@ class WebSocketRoute(BaseRoute):
         if ws._type != "websocket":
             return False
 
-        client_path = ws._scope["path"].split("/")
-
-        if len(client_path) != len(self._path_data):
-            return False
-
-        params = {}
-
-        for client_endpoint, server_endpoint in zip(client_path, self._path_data):
-            regex, convertor, name = server_endpoint
-            if not re.fullmatch(regex, client_endpoint):
-                return False
-            try:
-                params[name] = convertor(client_endpoint)
-            except ValueError:
-                return False
-        ws._scope["path_params"] = params
-        return True
+        return super()._match(ws)
 
     @property
     def description(self) -> str:
