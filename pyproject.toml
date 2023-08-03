@@ -1,0 +1,22 @@
+[project]
+authors = [{name = "cibere", email = "cibere.dev@gmail.com"}]
+dependencies = [
+  "yarl",
+  "msgspec",
+  "starlette",
+]
+name = "starapi"
+requires-python = ">=3.11"
+version = "0.0.1a"
+
+[project.optional-dependencies]
+all = [
+  "uvicorn[standard]",
+  "python-multipart",
+]
+standard = [
+  "uvicorn[standard]",
+]
+
+[project.urls]
+Source = "https://github.com/cibere/starapi"
