@@ -219,27 +219,6 @@ class Route(BaseRoute):
 
         await response(request)
 
-    def _generate_openapi_spec(self, op_id: str) -> tuple[list[Type[Struct]], dict]:
-        objects: list[Type[Struct]] = []
-
-        def conv(model: Type[Struct]) -> dict:
-            objects.append(model)
-            return struct_to_openapi_spec(model)
-
-        data = {
-            "description": self.description,
-            "summary": "",
-            "responses": {code: conv(m) for code, m in self._responses.items()},
-            "tags": self._tags,
-            "deprecated": self.deprecated,
-            "parameters": [p._to_openapi_spec(self._state) for p in self._parameters],
-            "operationId": op_id,
-        }
-        if self._payload is not None:
-            data["requestBody"] = conv(self._payload)
-
-        return objects, data
-
 
 class WebSocketRoute(BaseRoute):
     encoding: Literal["text", "json", "bytes"] = "text"
@@ -432,7 +411,8 @@ class Router:
                 return await route(request)
 
         if request._scope["path"] == "/openapi.json/":
-            return await self.handle_openapi_route(request)
+            if await self.handle_openapi_route(request) is True:
+                return
 
         if isinstance(request, WebSocket):
             await request.send(
@@ -445,14 +425,16 @@ class Router:
         else:
             await Response.not_found()(request)
 
-    async def handle_openapi_route(self, request: Connection) -> None:
+    async def handle_openapi_route(self, request: Connection) -> bool:
         assert request._type == "http"
 
-        if request.app._state.cached_api_docs is None:
-            request.app._state.construct_openapi_file(
-                title=request.app._api_info[0], version=request.app._api_info[1]
-            )
+        docs = request.app._state.get_docs()
+
+        if docs is None:
+            return False
+
         await Response(
-            request.app._state.cached_api_docs,
+            docs.current,
             headers={"Access-Control-Allow-Origin": "*"},
         )(request)
+        return True

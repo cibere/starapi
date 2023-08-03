@@ -1,11 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias
-
-ValidAnnotations: TypeAlias = Any
-
-if TYPE_CHECKING:
-    from .state import State
+from typing import Literal, Type
 
 __all__ = ("Parameter",)
 
@@ -18,21 +13,10 @@ class Parameter:
         *,
         required: bool,
         name: str,
-        type: ValidAnnotations,
+        type: Type,
         deprecated: bool = False,
     ) -> None:
         self.required = required
         self.name = name
         self.annotation = type
         self.deprecated = deprecated
-
-    def _to_openapi_spec(self, state: State) -> dict:
-        schema = {"title": self.name.title()}
-        schema.update(state.convert_to_openapi_type(self.annotation))
-        return {
-            "required": self.required,
-            "name": self.name,
-            "in": self.where,
-            "deprecated": self.deprecated,
-            "schema": schema,
-        }

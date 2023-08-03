@@ -2,9 +2,11 @@ from typing import Literal
 
 import msgspec
 
-from starapi import Application, Parameter, Request, Response
+from starapi import Application, OpenAPI, Parameter, Request, Response
 
-app = Application(debug=True)
+# docs = OpenAPI(title="My API Docs", version="1.0.0")
+
+app = Application(debug=True)  # , docs=docs)
 
 
 class ExamplePayload(msgspec.Struct):
