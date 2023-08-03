@@ -20,3 +20,15 @@ class Parameter:
         self.name = name
         self.annotation = type
         self.deprecated = deprecated
+
+    def __repr__(self) -> str:
+        x = [
+            f"{n}={getattr(self, n)!r}"
+            for n in (
+                "required",
+                "name",
+                "annotation",
+                "deprecated",
+            )
+        ]
+        return f"<{self.__class__.__name__} {' '.join(x)} >"

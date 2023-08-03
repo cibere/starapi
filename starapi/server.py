@@ -66,7 +66,6 @@ class Server(BaseASGIApp):
         self.case_insensitive = case_insensitive
 
     async def handle_404(self, scope: Scope, receive: Receive, send: Send) -> None:
-        print("App Not Found")
         request = Request(scope, receive, send)
         await Response.not_found()(request)
 
@@ -82,19 +81,13 @@ class Server(BaseASGIApp):
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         assert scope["type"] in ("http", "lifespan", "websocket")
 
-        print("-" * 10)
-
         path: str = scope["path"]
         endpoints: list[str] = path.split("/")
-        print(path)
-        print(endpoints)
         prefix = endpoints.pop(1)
         while len(endpoints) <= 1:
             endpoints.append("")
-        print(endpoints)
 
         scope["path"] = "/".join(endpoints)
-        print(scope["path"])
 
         if self.case_insensitive:
             prefix = prefix.lower()
@@ -105,3 +98,6 @@ class Server(BaseASGIApp):
         else:
             print(f"Sent to {app}")
             await app(scope, receive, send)
+
+    def __repr__(self) -> str:
+        return f"<{self.__class__.__name__} case_insensitive={self.case_insensitive!r} apps={len(self._apps)!r}>"

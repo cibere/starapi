@@ -19,6 +19,8 @@ from starlette.datastructures import FormData
 from starlette.formparsers import FormParser, MultiPartException, MultiPartParser
 from yarl import URL
 
+from starapi import app
+
 from .enums import WSCodes, WSMessageType, WSState
 from .errors import (
     ClientDisconnect,
@@ -62,6 +64,9 @@ class Address:
         self.host: str = data[0]
         self.port: int = data[1]
 
+    def __repr__(self) -> str:
+        return f"<{self.__class__.__name__} host={self.host!r} port={self.port!r}>"
+
 
 def _ws_must_be_connected(func: FuncT) -> FuncT:
     def decorated(*args, **kwargs):
@@ -93,7 +98,7 @@ class BaseRequest(Generic[AppT]):
         return self._scope["endpoint"]
 
     @property
-    def scheme(self) -> Literal["http", "https"]:
+    def schema(self) -> Literal["http", "https"]:
         return self._scope["schema"]
 
     @property
@@ -137,6 +142,18 @@ class BaseRequest(Generic[AppT]):
     @cached_property
     def headers(self) -> dict[str, str]:
         return {name.decode(): value.decode() for name, value in self._scope["headers"]}
+
+    def __repr__(self, extras: list = MISSING) -> str:
+        extras = extras or []
+        extras.extend(
+            (
+                "app",
+                "endpoint",
+                "schema",
+            )
+        )
+        x = [f"{n}={getattr(self, n)!r}" for n in extras]
+        return f"<{self.__class__.__name__} {' '.join(x)} >"
 
 
 class WebSocket(BaseRequest):
@@ -308,10 +325,6 @@ class WebSocket(BaseRequest):
             }
         )
 
-    @classmethod
-    def _from_request(cls, request: Request) -> Self:
-        return cls(request._scope, request._receive, request._send)
-
 
 class Request(BaseRequest):
     _type: Literal["http"]
@@ -389,3 +402,6 @@ class Request(BaseRequest):
         form = cache.get("form", None)
         if form:
             await cache["form"].close()
+
+    def __repr__(self) -> str:
+        return super().__repr__(["method", "is_disconnected"])

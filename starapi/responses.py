@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from asyncio.staggered import staggered_race
 from typing import TYPE_CHECKING, Any, Optional, Self
 from urllib.parse import quote
 
@@ -118,3 +119,6 @@ class Response:
         cls, data: DataType = None, headers: Optional[dict[str, str]] = None
     ) -> Self:
         return cls("Method Not Allowed" if data is None else data, 405, headers=headers)
+
+    def __repr__(self) -> str:
+        return f"<{self.__class__.__name__} status={self.status_code!r} media_type={self.media_type!r}>"

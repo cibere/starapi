@@ -218,3 +218,19 @@ class OpenAPI:
     def save(self, fp: str, *, indent: int = 4) -> None:
         with open(fp, "w", encoding="utf-8") as f:
             json.dump(self.current, f, indent=indent)
+
+    def __repr__(self) -> str:
+        x = [
+            f"{n}={getattr(self, n)!r}"
+            for n in (
+                "title",
+                "version",
+                "summary",
+                "description",
+                "TOS_url",
+                "license",
+                "external_docs_link",
+                "contact",
+            )
+        ]
+        return f"<{self.__class__.__name__} {' '.join(x)} >"

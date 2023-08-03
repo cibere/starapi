@@ -72,3 +72,6 @@ class Group:
 
     async def on_error(self, request: BaseRequest, exec: Exception) -> None:
         ...
+
+    def __repr__(self) -> str:
+        return f"<{self.__class__.__name__} prefix={self.prefix!r} routes={len(self.routes)}>"

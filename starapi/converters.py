@@ -21,6 +21,9 @@ class CustomConverter(ABC):
     def convert(self, value: str) -> Any:
         raise NotImplementedError("This should be overriden")
 
+    def __repr__(self) -> str:
+        return f"<{self.__class__.__name__}> name={self.name!r} regex={self.regex!r}"
+
 
 def float_convertor(inp: str) -> float:
     if "." in inp:

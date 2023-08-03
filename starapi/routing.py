@@ -7,6 +7,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any, Generic, Literal, Type, TypeAlias
 
+from starapi.utils import MISSING
+
 from ._types import (
     Connection,
     Converter,
@@ -129,6 +131,17 @@ class BaseRoute(ABC, Generic[GroupT]):
 
         self._path_data = path
 
+    def __repr__(self, extras: list = MISSING) -> str:
+        extras = extras or []
+        extras.extend(
+            (
+                "path",
+                "add_prefix",
+            )
+        )
+        x = [f"{n}={getattr(self, n)!r}" for n in extras]
+        return f"<{self.__class__.__name__} {' '.join(x)} >"
+
 
 class Route(BaseRoute):
     def __init__(
@@ -235,6 +248,9 @@ class Route(BaseRoute):
                 response = Response.internal()
 
         await response(request)
+
+    def __repr__(self) -> str:
+        return super().__repr__(["methods", "hidden"])
 
 
 class WebSocketRoute(BaseRoute):

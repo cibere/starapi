@@ -201,3 +201,6 @@ class Application(BaseASGIApp):
 
     async def on_request(self, request: Request):
         ...
+
+    def __repr__(self) -> str:
+        return f"<{self.__class__.__name__} routes={len(self.routes)} groups={len(self.groups)}>"

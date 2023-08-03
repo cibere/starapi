@@ -13,3 +13,6 @@ class BaseMiddleware(ABC):
     @abstractmethod
     async def __call__(self, request: BaseRequest) -> None:
         ...
+
+    def __repr__(self) -> str:
+        return f"<{self.__class__.__name__}>"
