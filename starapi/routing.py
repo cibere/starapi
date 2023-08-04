@@ -388,14 +388,16 @@ def _create_http_route(
 
 
 class RouteSelector:
-    def __call__(self, *args, **kwargs) -> RouteDecoCallbackType:
+    def __call__(
+        self, *args, **kwargs
+    ) -> Callable[[HTTPRouteCallback], Route,]:
         methods = kwargs.pop("methods", [])
         kwargs["methods"] = methods
 
         if "prefix" not in kwargs:
             kwargs["prefix"] = True
 
-        def decorator(callback: HTTPRouteCallback) -> RouteType:
+        def decorator(callback: HTTPRouteCallback) -> Route:
             route = Route(*args, **kwargs)
             route.callback = callback
             return route
@@ -405,7 +407,9 @@ class RouteSelector:
     @staticmethod
     def _quick_gen(method: str):
         @mimmic(_create_http_route, keep_return=True)
-        def func(*args, **kwargs) -> RouteDecoCallbackType:
+        def func(
+            *args, **kwargs
+        ) -> Callable[[HTTPRouteCallback], Route,]:
             kwargs.setdefault("methods", [])
             kwargs["methods"].append(method)
             return RouteSelector.__call__(*args, **kwargs)
