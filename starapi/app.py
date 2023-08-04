@@ -73,7 +73,8 @@ class Application(BaseASGIApp):
             raise GroupAlreadyAdded(group.name)
 
         for route in group.__routes__:
-            route._path = f"/{prefix or ''}{route.path}"
+            if prefix:
+                route._path = f"/{prefix or ''}{route.path}"
 
             self.add_route(route)
 
