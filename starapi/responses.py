@@ -103,8 +103,11 @@ class Response:
 
         return [(k.lower().encode(), v.encode()) for k, v in headers.items()]
 
-    async def __call__(self, request: Request) -> None:
-        self = await request.app._state.formatter(request, self)  # type: ignore
+    async def __call__(
+        self, request: Request, *, bypass_formatter: bool = False
+    ) -> None:
+        if bypass_formatter is False:
+            self = await request.app._state.formatter(request, self)  # type: ignore
 
         body = self._parse_body(
             accept_header=request.headers.get("accept", None), state=request.app._state

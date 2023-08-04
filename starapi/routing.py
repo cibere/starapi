@@ -496,5 +496,5 @@ class Router:
         await Response(
             docs.current,
             headers={"Access-Control-Allow-Origin": "*"},
-        )(request)
+        )(request, bypass_formatter=True)
         return True
