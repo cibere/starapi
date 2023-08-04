@@ -5,10 +5,19 @@ from asyncio.staggered import staggered_race
 from typing import TYPE_CHECKING, Any, Optional, Self
 from urllib.parse import quote
 
-DataType = list | str | dict | None
+try:
+    import msgspec
+except ImportError:
+    msgspec = None
 
 if TYPE_CHECKING:
+    from msgspec import Struct
+
     from .requests import BaseRequest
+
+    DataType = list | str | dict | None | Struct
+else:
+    DataType = list | str | dict | None
 
 __all__ = ("Response",)
 
@@ -32,7 +41,14 @@ class Response:
         if isinstance(data, str):
             data = data.encode()
 
-        self.body = data
+        if msgspec is not None:
+            if isinstance(data, msgspec.Struct):
+                self.body = msgspec.json.encode(data)
+            else:
+                self.body = data
+        else:
+            self.body = data
+
         self.status_code = status_code
         self.media_type = media_type
         self.headers = headers or {}
