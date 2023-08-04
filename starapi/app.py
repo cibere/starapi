@@ -2,9 +2,18 @@ from __future__ import annotations
 
 import inspect
 from difflib import IS_LINE_JUNK
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, Type, TypeVar, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Coroutine,
+    Literal,
+    Type,
+    TypeVar,
+    overload,
+)
 
-from .errors import GroupAlreadyAdded, InvalidWebSocketRoute
+from .errors import DependencyException, GroupAlreadyAdded, InvalidWebSocketRoute
 from .requests import Request, WebSocket
 from .routing import (
     HTTPRouteCallback,
@@ -18,9 +27,13 @@ from .server import BaseASGIApp
 from .state import State
 from .utils import MISSING, mimmic
 
+try:
+    import msgspec
+except ImportError:
+    msgspec = None
+
 if TYPE_CHECKING:
     from ._types import Lifespan, Middleware, Receive, Scope, Send
-    from .converters import Converter
     from .groups import Group
     from .openapi import OpenAPI
     from .requests import BaseRequest
@@ -46,11 +59,24 @@ class Application(BaseASGIApp):
         # cors: CORSSettings = MISSING,
         lf: Lifespan = MISSING,
         docs: OpenAPI = MISSING,
+        default_body_format: Literal["json", "yaml", "toml", "msgpack"] = MISSING,
     ) -> None:
         self._middleware: list[Middleware] = []  # [cors or CORSSettings()]
 
         self.debug = False if MISSING else debug
-        self._state = State(self, lf, docs)
+        kwargs = {}
+
+        if default_body_format is not MISSING:
+            if msgspec is None:
+                raise DependencyException(
+                    "msgspec",
+                    "msgspec is required for the builtin payload implimentation.",
+                )
+            default_format = eval(f"msgspec.{default_body_format}")
+            kwargs["default_encoder"] = default_format.encode
+            kwargs["default_decoder"] = default_format.decode
+
+        self._state = State(self, lf, docs, **kwargs)
 
     def add_group(self, group: Group, *, prefix: str = MISSING) -> None:
         """

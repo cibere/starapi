@@ -3,15 +3,17 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from .converters import builtin_converters
-from .errors import ConverterAlreadyAdded
 from .routing import Route, Router
 from .utils import MISSING
 
+try:
+    import msgspec
+except ImportError:
+    msgspec = None
+
 if TYPE_CHECKING:
-    from ._types import Lifespan
+    from ._types import Decoder, Encoder, Lifespan
     from .app import Application
-    from .converters import Converter
     from .groups import Group
     from .openapi import OpenAPI
     from .requests import BaseRequest
@@ -22,12 +24,16 @@ __all__ = ("State",)
 
 class State:
     docs: OpenAPI | None
+    default_encoder: Encoder
+    default_decoder: Decoder
 
     def __init__(
         self,
         app: Application,
         lifespan: Lifespan = MISSING,
         docs: OpenAPI = MISSING,
+        default_encoder: Encoder = MISSING,
+        default_decoder: Decoder = MISSING,
     ):
         self.app = app
         self.router = Router(lifespan=lifespan)
@@ -35,6 +41,10 @@ class State:
 
         self.groups: list[Group] = []
         self.docs = docs or None
+
+        if msgspec is not None:
+            self.default_decoder = default_decoder or msgspec.json.decode  # type: ignore
+            self.default_encoder = default_encoder or msgspec.json.encode
 
     async def _handle_route_error(self, request: BaseRequest, error: Exception) -> None:
         route = request.endpoint

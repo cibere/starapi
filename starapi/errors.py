@@ -13,7 +13,6 @@ __all__ = (
     "GroupException",
     "GroupAlreadyAdded",
     "StartupException",
-    "UvicornNotInstalled",
     "ClientException",
     "ClientDisconnect",
     "ASGIException",
@@ -29,13 +28,18 @@ __all__ = (
     "PayloadException",
     "InvalidBodyData",
     "PayloadValidationException",
-    "MsgSpecNotInstalled",
     "ConverterEntryNotFound",
+    "DependencyException",
 )
 
 
 class StarApiException(Exception):
     ...
+
+
+class DependencyException(StarApiException):
+    def __init__(self, library: str, reason: str) -> None:
+        super().__init__(f"{library!r} is not installed. {reason}")
 
 
 class ClientException(StarApiException):
@@ -62,11 +66,6 @@ class StartupException(StarApiException):
     ...
 
 
-class UvicornNotInstalled(StartupException):
-    def __init__(self) -> None:
-        super().__init__(f"Uvicorn is not installed.")
-
-
 class HTTPException(StarApiException):
     def __init__(
         self,
@@ -86,16 +85,13 @@ class PayloadException(StarApiException):
     ...
 
 
-class MsgSpecNotInstalled(PayloadException):
-    def __init__(self) -> None:
-        super().__init__(
-            "'msgspec' is not installed. It is required for builtin payload functions."
-        )
-
-
 class InvalidBodyData(PayloadException):
-    def __init__(self, body_format: str) -> None:
-        super().__init__(f"Invalid {body_format!r} data received.")
+    def __init__(self, body_format: str | None) -> None:
+        if body_format is None:
+            msg = "Invalid body received."
+        else:
+            msg = f"Invalid {body_format!r} data received."
+        super().__init__(msg)
 
 
 class PayloadValidationException(PayloadException):

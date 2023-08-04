@@ -1,43 +1,22 @@
 from __future__ import annotations
 
 import json
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    AsyncGenerator,
-    Callable,
-    Generic,
-    Literal,
-    Sequence,
-    TypeVar,
-    overload,
-)
+from typing import (TYPE_CHECKING, Any, AsyncGenerator, Callable, Generic,
+                    Literal, Sequence, TypeVar, overload)
 from urllib.parse import parse_qs
 
 from starlette.datastructures import FormData
-from starlette.formparsers import FormParser, MultiPartException, MultiPartParser
+from starlette.formparsers import (FormParser, MultiPartException,
+                                   MultiPartParser)
 from yarl import URL
 
 from .enums import WSCodes, WSMessageType, WSState
-from .errors import (
-    ClientDisconnect,
-    HTTPException,
-    InvalidBodyData,
-    MsgSpecNotInstalled,
-    PayloadValidationException,
-    UnexpectedASGIMessageType,
-    WebSocketDisconnect,
-    WebSocketDisconnected,
-)
-from .utils import (
-    MISSING,
-    AsyncIteratorProxy,
-    cached_coro,
-    cached_gen,
-    cached_property,
-    parse_cookies,
-    url_from_scope,
-)
+from .errors import (ClientDisconnect, DependencyException, HTTPException,
+                     InvalidBodyData, PayloadValidationException,
+                     UnexpectedASGIMessageType, WebSocketDisconnect,
+                     WebSocketDisconnected)
+from .utils import (MISSING, AsyncIteratorProxy, cached_coro, cached_gen,
+                    cached_property, parse_cookies, url_from_scope)
 
 try:
     from multipart.multipart import parse_options_header
@@ -52,7 +31,7 @@ except ImportError:
 if TYPE_CHECKING:
     from typing_extensions import TypeVar
 
-    from ._types import Receive, Scope, Send, WSMessage
+    from ._types import Decoder, Receive, Scope, Send, WSMessage
     from .app import Application
     from .routing import Route
 
@@ -401,7 +380,9 @@ class Request(BaseRequest):
         """
 
         if msgspec is None:
-            raise MsgSpecNotInstalled()
+            raise DependencyException(
+                "msgspec", "msgspec is required for the builtin payload implimentation."
+            )
         payload = self.endpoint._payload
         if payload is None:
             raise RuntimeError("The route must have a set payload to use this")
@@ -410,17 +391,18 @@ class Request(BaseRequest):
         if content_type in ("application/x-yaml", "text/yaml"):
             format_ = "yaml"
         elif content_type == "application/toml":
-            decoder = msgspec.toml.decode
             format_ = "toml"
         elif content_type == "application/json":
-            decoder = msgspec.json.decode
             format_ = "json"
+        elif content_type in ("application/msgpack", "application/x-msgpack"):
+            format_ = "msgpack"
         else:
-            raise HTTPException(415)
+            format_ = None
 
-        decoder = eval(f"msgspec.{format_}.decode")
-        if TYPE_CHECKING:
-            decoder = msgspec.json.decode
+        if format_ is None:
+            decoder = self.app._state.default_decoder
+        else:
+            decoder: Decoder = eval(f"msgspec.{format_}.decode")
 
         try:
             return decoder(await self.body(), type=payload)

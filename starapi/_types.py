@@ -9,6 +9,8 @@ from typing import (
     Literal,
     Mapping,
     MutableMapping,
+    Protocol,
+    Type,
     TypeAlias,
     TypedDict,
     TypeVar,
@@ -18,6 +20,7 @@ from .middleware import BaseMiddleware
 from .requests import Request, WebSocket
 
 if TYPE_CHECKING:
+    from msgspec import Struct
     from typing_extensions import TypeVar
 
     from .app import Application
@@ -25,9 +28,11 @@ if TYPE_CHECKING:
 
     AppT = TypeVar("AppT", bound=Application, default=Application)
     GroupT = TypeVar("GroupT", bound=Group, covariant=True, default=Group)
+    StructT = TypeVar("StructT", bound=Type[Struct], default=Type[Struct])
 else:
     AppT = TypeVar("AppT")
     GroupT = TypeVar("GroupT", bound="Group")
+    StructT = TypeVar("StructT", bound="Struct")
 
 AppType = TypeVar("AppType")
 Connection = Request | WebSocket
@@ -54,6 +59,14 @@ Lifespan = StatelessLifespan[AppType] | StatefulLifespan[AppType]
 Middleware = BaseMiddleware | Callable[[Request | WebSocket], Coroutine[Any, Any, Any]]
 
 Headers = list[tuple[bytes, bytes]]
+
+
+class Decoder(Protocol):
+    def __call__(self, body: bytes | str, *, type: StructT) -> StructT:
+        ...
+
+
+Encoder = Callable[[StructT], bytes]
 
 
 class WSCloseMessage(TypedDict):

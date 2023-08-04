@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .errors import UvicornNotInstalled
+from .errors import DependencyException
 from .requests import Request
 from .responses import Response
 from .utils import mimmic
@@ -35,7 +35,9 @@ class BaseASGIApp:
         try:
             import uvicorn
         except ImportError:
-            raise UvicornNotInstalled() from None
+            raise DependencyException(
+                "uvicorn", "uvicorn is used as the default ASGI webserver."
+            ) from None
 
         uvicorn.run(self, *args, **kwargs)
 
@@ -51,7 +53,9 @@ class BaseASGIApp:
         try:
             import uvicorn
         except ImportError:
-            raise UvicornNotInstalled() from None
+            raise DependencyException(
+                "uvicorn", "uvicorn is used as the default ASGI webserver."
+            ) from None
 
         server = uvicorn.Server(uvicorn.Config(self, *args, **kwargs))
         await server.serve()

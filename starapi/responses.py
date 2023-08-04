@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from asyncio.staggered import staggered_race
 from typing import TYPE_CHECKING, Any, Optional, Self
 from urllib.parse import quote
 
@@ -13,7 +12,9 @@ except ImportError:
 if TYPE_CHECKING:
     from msgspec import Struct
 
+    from ._types import Encoder
     from .requests import BaseRequest
+    from .state import State
 
     DataType = list | str | dict | None | Struct
 else:
@@ -24,8 +25,6 @@ __all__ = ("Response",)
 
 class Response:
     charset = "utf-8"
-    raw_headers: list[tuple[bytes, bytes]]
-    body: bytes
 
     def __init__(
         self,
@@ -34,6 +33,18 @@ class Response:
         headers: Optional[dict[str, str]] = None,
         media_type: Optional[str] = None,
     ) -> None:
+        self.body = data
+        self.__data = data
+        self.status_code = status_code
+        self.media_type = media_type
+        self.headers = headers or {}
+
+    @property
+    def body(self) -> bytes:
+        return self._body
+
+    @body.setter
+    def body(self, data: Any):
         if isinstance(data, (dict, list)):
             data = json.dumps(data)
         if data is None:
@@ -43,17 +54,31 @@ class Response:
 
         if msgspec is not None:
             if isinstance(data, msgspec.Struct):
-                self.body = msgspec.json.encode(data)
-            else:
-                self.body = data
+                data = msgspec.json.encode(data)
+
+        self._body = data
+
+    def _fix_struct_encoding(self, *, accept_header: str | None, state: State) -> None:
+        if msgspec is None:
+            return
+
+        if accept_header in ("application/x-yaml", "text/yaml"):
+            format_ = "yaml"
+        elif accept_header == "application/toml":
+            format_ = "toml"
+        elif accept_header == "application/json":
+            format_ = "json"
+        elif accept_header in ("application/msgpack", "application/x-msgpack"):
+            format_ = "msgpack"
         else:
-            self.body = data
+            format_ = None
 
-        self.status_code = status_code
-        self.media_type = media_type
-        self.headers = headers or {}
+        if format_ is None:
+            encoder = state.default_encoder
+        else:
+            encoder: Encoder = eval(f"msgspec.{format_}.encode")
 
-        self.raw_headers = self._process_headers()
+        self.body = encoder(self.__data)
 
     def _process_headers(self) -> list[tuple[bytes, bytes]]:
         if self.headers:
@@ -79,11 +104,15 @@ class Response:
         return raw_headers
 
     async def __call__(self, request: BaseRequest) -> None:
+        self._fix_struct_encoding(
+            accept_header=request.headers.get("accept", None), state=request.app._state
+        )
+
         await request._send(
             {
                 "type": "http.response.start",
                 "status": self.status_code,
-                "headers": self.raw_headers,
+                "headers": self._process_headers(),
             }
         )
         await request._send({"type": "http.response.body", "body": self.body})
