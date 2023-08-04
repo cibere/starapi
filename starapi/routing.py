@@ -187,8 +187,8 @@ class Route(BaseRoute):
     ) -> None:
         super().__init__(path=path, prefix=prefix)
         self._methods = methods or []
-        if "GET" in self._methods and "HEAD" not in self._methods:
-            self._methods.append("HEAD")
+        if methods is MISSING:
+            self._methods = ["GET", "HEAD"]
 
         self.hidden = hidden
 
