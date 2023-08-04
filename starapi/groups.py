@@ -19,13 +19,17 @@ class Group:
     prefix: str
     __routes__: list[RouteType]
     app: Application
+    _deprecated: bool
 
-    def __init_subclass__(cls, prefix: str = MISSING) -> None:
+    def __init_subclass__(
+        cls, prefix: str = MISSING, deprecated: bool = MISSING
+    ) -> None:
         cls.prefix = prefix or cls.__name__
+        cls._deprecated = deprecated
         if cls.prefix and not cls.prefix.startswith("/"):
             cls.prefix = f"/{cls.prefix}"
 
-    def __init__(self, app: Application) -> None:
+    def __init__(self, app: Application, deprecated: bool = MISSING) -> None:
         self.__routes__ = []
         self.app = app
 
@@ -37,6 +41,27 @@ class Group:
             route._group = self
             route._path = f'{self.prefix.lower()}/{route.path.lstrip("/")}'
             self.__routes__.append(route)
+
+        if deprecated is MISSING and self._deprecated is MISSING:
+            self.deprecated = False
+        elif deprecated is not MISSING:
+            self.deprecated = deprecated
+        else:
+            self.deprecated = self._deprecated
+
+    @property
+    def deprecated(self) -> bool:
+        return self._deprecated
+
+    @deprecated.setter
+    def deprecated(self, new: bool):
+        for route in self.__routes__:
+            if isinstance(route, Route):
+                route.deprecated = new
+                print(f"Parked {route} as depreciated")
+            else:
+                print(f"Didn't mark {route} as depreciated")
+        self._deprecated = new
 
     @property
     def name(self) -> str:
