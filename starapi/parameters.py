@@ -38,7 +38,7 @@ class Parameter:
 
 
 class PathParameter(Parameter):
-    where: Literal["path"]
+    where: Literal["path"] = "path"
 
     def __init__(
         self,
