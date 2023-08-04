@@ -192,21 +192,20 @@ class Route(BaseRoute):
 
         self.hidden = hidden
 
-        if hidden is False:
-            self._responses = responses or {}
-            self._tags = tags or []
-            self._payload: Type[Struct] | None = payload or None
-            self.deprecated = deprecated
+        self._responses = responses or {}
+        self._tags = tags or []
+        self._payload: Type[Struct] | None = payload or None
+        self.deprecated = deprecated
 
-            self._parameters: list[Parameter] = []
-            for where, params in [
-                ("query", query_parameters),
-                ("header", headers),
-                ("cookie", cookies),
-            ]:
-                for param in params or []:
-                    param.where = where
-                    self._parameters.append(param)
+        self._parameters: list[Parameter] = []
+        for where, params in [
+            ("query", query_parameters),
+            ("header", headers),
+            ("cookie", cookies),
+        ]:
+            for param in params or []:
+                param.where = where
+                self._parameters.append(param)
 
     @property
     def description(self) -> str:

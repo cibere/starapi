@@ -8,7 +8,6 @@ from typing import (
     Callable,
     Generic,
     Literal,
-    Self,
     Sequence,
     TypeVar,
     overload,
@@ -19,12 +18,13 @@ from starlette.datastructures import FormData
 from starlette.formparsers import FormParser, MultiPartException, MultiPartParser
 from yarl import URL
 
-from starapi import app
-
 from .enums import WSCodes, WSMessageType, WSState
 from .errors import (
     ClientDisconnect,
     HTTPException,
+    InvalidBodyData,
+    MsgSpecNotInstalled,
+    PayloadValidationException,
     UnexpectedASGIMessageType,
     WebSocketDisconnect,
     WebSocketDisconnected,
@@ -43,6 +43,11 @@ try:
     from multipart.multipart import parse_options_header
 except ModuleNotFoundError:
     parse_options_header = None
+
+try:
+    import msgspec
+except ImportError:
+    msgspec = None
 
 if TYPE_CHECKING:
     from typing_extensions import TypeVar
@@ -364,6 +369,65 @@ class Request(BaseRequest):
     @cached_coro
     async def json(self) -> dict | list:
         return json.loads(await self.body())
+
+    @cached_coro
+    async def payload(self) -> Any:
+        """
+        |coro|
+
+        Decodes the request's function into the payload given to the route.
+
+        Raises
+        -----------
+        RuntimeError
+            The route doesn't have a set payload
+        MsgSpecNotInstalled
+            msgspec is not installed. It is required for starapi's payload implimentation
+        InvalidBodyData
+            Invalid Data was given, and could not be decoded
+        HTTPException
+            Unknown `content-type` header was passed (or not at all)
+        PayloadValidationException
+            Request data does not fit the payload
+
+        Returns
+        -----------
+        Struct
+            An instance of the payload set in the route
+
+        Notes
+        -----------
+        The coroutine actually returns `Any` so the user has an easier time typing `Request.payload` to their payload.
+        """
+
+        if msgspec is None:
+            raise MsgSpecNotInstalled()
+        payload = self.endpoint._payload
+        if payload is None:
+            raise RuntimeError("The route must have a set payload to use this")
+
+        content_type = self.headers.get("content-type", None)
+        if content_type in ("application/x-yaml", "text/yaml"):
+            format_ = "yaml"
+        elif content_type == "application/toml":
+            decoder = msgspec.toml.decode
+            format_ = "toml"
+        elif content_type == "application/json":
+            decoder = msgspec.json.decode
+            format_ = "json"
+        else:
+            raise HTTPException(415)
+
+        decoder = eval(f"msgspec.{format_}.decode")
+        if TYPE_CHECKING:
+            decoder = msgspec.json.decode
+
+        try:
+            return decoder(await self.body(), type=payload)
+        except msgspec.ValidationError as e:
+            raise PayloadValidationException(f"{e}")
+        except msgspec.DecodeError:
+            raise InvalidBodyData(format_) from None
 
     @cached_coro
     async def form(
