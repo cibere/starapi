@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Generic, Literal, Type, TypeAlias
 from ._types import Connection, GroupT, Lifespan, Receive, Scope, Send, WSMessage
 from .converters import Converter, builtin_converters
 from .enums import WSCodes, WSMessageType
-from .errors import ConverterNotFound
+from .errors import ConverterEntryNotFound, ConverterNotFound
 from .parameters import Parameter, PathParameter
 from .requests import WebSocket
 from .responses import Response
@@ -119,7 +119,25 @@ class BaseRoute(Generic[GroupT]):
                 name = match["name"]
                 param = path_params.pop(name, None)
                 if param is not None:
-                    converter: Converter = param.annotation()
+                    annotation = param.annotation
+                    if not issubclass(annotation, Converter):
+                        converter = builtin_converters.get(annotation, None)
+                    else:
+                        converter = annotation
+
+                    if converter is None:
+                        raise ConverterNotFound(
+                            f"I found no converter for {annotation!r}. To impliment one yourself, have it override `starapi.Converter`, and override the `convert` method."
+                        )
+                    try:
+                        converter = converter()
+                    except TypeError as e:
+                        if "missing 1 required positional argument" in str(
+                            e
+                        ) or "missing 1 required keyword-only argument" in str(e):
+                            raise ConverterEntryNotFound(converter)
+                        else:
+                            raise
                     extra = converter, name
                     regex = converter.regex
 
@@ -372,8 +390,6 @@ def _create_http_route(
 class RouteSelector:
     def __call__(self, *args, **kwargs) -> RouteDecoCallbackType:
         methods = kwargs.pop("methods", [])
-        methods.append("GET")
-        methods.append("HEAD")
         kwargs["methods"] = methods
 
         if "prefix" not in kwargs:

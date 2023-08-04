@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import http
-from ast import Str
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Type
 
 from .enums import WSMessageType
 
@@ -31,6 +30,7 @@ __all__ = (
     "InvalidBodyData",
     "PayloadValidationException",
     "MsgSpecNotInstalled",
+    "ConverterEntryNotFound",
 )
 
 
@@ -156,3 +156,10 @@ class ConverterAlreadyAdded(ConverterException):
 class ConverterNotFound(ConverterException):
     def __init__(self, name: str) -> None:
         super().__init__(f"Converter {name!r} was not found")
+
+
+class ConverterEntryNotFound(ConverterException):
+    def __init__(self, converter: Type[Converter]) -> None:
+        super().__init__(
+            f"Converter {converter!r} has no valid entrypoint. Make sure the __new__ and __init__ take no required arguments"
+        )
