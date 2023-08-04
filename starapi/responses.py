@@ -13,12 +13,12 @@ if TYPE_CHECKING:
     from msgspec import Struct
 
     from ._types import Encoder
-    from .requests import BaseRequest
+    from .requests import Request
     from .state import State
 
-    DataType = list | str | dict | None | Struct
+    DataType = list | str | dict | None | Struct | bytes
 else:
-    DataType = list | str | dict | None
+    DataType = list | str | dict | None | bytes
 
 __all__ = ("Response",)
 
@@ -28,37 +28,29 @@ class Response:
 
     def __init__(
         self,
-        data: Any = None,
+        data: DataType = None,
         status_code: int = 200,
         headers: Optional[dict[str, str]] = None,
         media_type: Optional[str] = None,
     ) -> None:
         self.body = data
-        self.__data = data
+        self.raw_body = data
         self.status_code = status_code
         self.media_type = media_type
         self.headers = headers or {}
 
     @property
-    def body(self) -> bytes:
+    def body(self) -> DataType:
         return self._body
 
     @body.setter
-    def body(self, data: Any):
-        if isinstance(data, (dict, list)):
-            data = json.dumps(data)
-        if data is None:
-            data = b""
-        if isinstance(data, str):
-            data = data.encode()
-
-        if msgspec is not None:
-            if isinstance(data, msgspec.Struct):
-                data = msgspec.json.encode(data)
-
+    def body(self, data: DataType):
+        self.raw_body = data
         self._body = data
 
-    def _fix_struct_encoding(self, *, accept_header: str | None, state: State) -> None:
+    def _msgspec_parsing(
+        self, *, accept_header: str | None, state: State
+    ) -> bytes | None:
         if msgspec is None:
             return
 
@@ -78,33 +70,43 @@ class Response:
         else:
             encoder: Encoder = eval(f"msgspec.{format_}.encode")
 
-        self.body = encoder(self.__data)
+        return encoder(self.body)  # type: ignore
 
-    def _process_headers(self) -> list[tuple[bytes, bytes]]:
-        if self.headers:
-            raw_headers = [
-                (k.lower().encode("latin-1"), v.encode("latin-1"))
-                for k, v in self.headers.items()
-            ]
-        else:
-            raw_headers = []
-        keys = [h[0] for h in raw_headers]
+    def _parse_body(self, *, accept_header: str | None, state: State) -> bytes:
+        d = self._msgspec_parsing(accept_header=accept_header, state=state)
+        if d is not None:
+            return d
 
-        if "content-length" not in keys:
-            raw_headers.append(
-                (b"content-length", str(len(self.body)).encode("latin-1"))
-            )
-        if self.media_type is not None and "content_type" not in keys:
+        data = self.body
+
+        if isinstance(data, (dict, list)):
+            data = json.dumps(data)
+        if data is None:
+            data = b""
+        if isinstance(data, str):
+            data = data.encode()
+
+        assert isinstance(data, bytes)
+        return data
+
+    def _process_headers(self, content_length: int) -> list[tuple[bytes, bytes]]:
+        headers = self.headers
+
+        if "content-length" not in headers:
+            headers["content-length"] = str(content_length)
+        if self.media_type is not None and "content_type" not in headers:
             content_type = self.media_type
 
             if content_type.startswith("text/"):
                 content_type += "; charset=" + self.charset
-            raw_headers.append((b"content-type", content_type.encode("latin-1")))
+            headers["content-type"] = content_type
 
-        return raw_headers
+        return [(k.lower().encode(), v.encode()) for k, v in headers.items()]
 
-    async def __call__(self, request: BaseRequest) -> None:
-        self._fix_struct_encoding(
+    async def __call__(self, request: Request) -> None:
+        self = await request.app._state.formatter(request, self)  # type: ignore
+
+        body = self._parse_body(
             accept_header=request.headers.get("accept", None), state=request.app._state
         )
 
@@ -112,10 +114,10 @@ class Response:
             {
                 "type": "http.response.start",
                 "status": self.status_code,
-                "headers": self._process_headers(),
+                "headers": self._process_headers(len(body)),
             }
         )
-        await request._send({"type": "http.response.body", "body": self.body})
+        await request._send({"type": "http.response.body", "body": body})
 
     @classmethod
     def ok(
