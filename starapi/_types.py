@@ -53,7 +53,6 @@ Lifespan = StatelessLifespan[AppType] | StatefulLifespan[AppType]
 
 Middleware = BaseMiddleware | Callable[[Request | WebSocket], Coroutine[Any, Any, Any]]
 
-Converter = Callable[[str], Any]
 Headers = list[tuple[bytes, bytes]]
 
 

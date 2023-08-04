@@ -1,54 +1,70 @@
 from __future__ import annotations
 
 import datetime
+import re
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable, Self, Type
 
-if TYPE_CHECKING:
-    from ._types import Converter
+from .utils import MISSING
 
 al = r".*"
 
-__all__ = ("CustomConverter",)
+__all__ = ("Converter",)
 
 
-class CustomConverter(ABC):
-    def __init__(self, *, regex: str, name: str) -> None:
-        self.regex = regex
-        self.name = name
+class Converter(ABC):
+    regex: str
+
+    def __init__(self, *, regex: str = MISSING) -> None:
+        if regex:
+            self.regex = regex
+
+    def __init_subclass__(cls, *, regex: str = MISSING) -> None:
+        if regex is MISSING:
+            cls.regex = r".*"
+        else:
+            cls.regex = regex
 
     @abstractmethod
     def convert(self, value: str) -> Any:
         raise NotImplementedError("This should be overriden")
 
     def __repr__(self) -> str:
-        return f"<{self.__class__.__name__}> name={self.name!r} regex={self.regex!r}"
+        return f"<{self.__class__.__name__}> regex={self.regex!r}"
 
 
-def float_convertor(inp: str) -> float:
-    if "." in inp:
-        return float(inp)
-    else:
-        raise ValueError("Invalid Float Given")
+class FloatConverter(Converter, regex=r"[0-9]*.[0-9]*"):
+    def convert(self, value: str) -> float:
+        if "." in value:
+            return float(value)
+        else:
+            raise ValueError("Invalid Float Given")
 
 
-def epoch_convertor(inp: str) -> datetime.datetime:
-    try:
-        return datetime.datetime.fromtimestamp(float(inp))
-    except OSError:
-        raise ValueError("Invalid Epoch Timestamp Given") from None
+class IntConverter(Converter, regex=r"[0-9]*"):
+    def convert(self, value: str) -> int:
+        return int(value)
 
 
-def iso_convertor(inp: str) -> datetime.datetime:
-    try:
-        return datetime.datetime.fromisoformat(inp)
-    except OSError:
-        raise ValueError("Invalid ISO Timestamp Given") from None
+class DatetimeConverter(Converter):
+    def convert(self, inp: str) -> datetime.datetime:
+        try:
+            return datetime.datetime.fromtimestamp(float(inp))
+        except (OSError, ValueError):
+            pass
+        try:
+            return datetime.datetime.fromisoformat(inp)
+        except OSError:
+            pass
+        try:
+            return datetime.datetime.fromordinal(int(inp))
+        except OSError:
+            pass
+        raise ValueError()
 
 
-builtin_converters: dict[str, tuple[str, Converter]] = {
-    "int": (r"[0-9]*", int),
-    "float": (r"[0-9]*.[0-9]*", float_convertor),
-    "iso-timestamp": (al, iso_convertor),
-    "epoch-timestamp": (r"[0-9]*", epoch_convertor),
+builtin_converters: dict[Type, Type[Converter]] = {
+    int: IntConverter,
+    float: FloatConverter,
+    datetime.datetime: DatetimeConverter,
 }

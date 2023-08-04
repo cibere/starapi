@@ -1,27 +1,17 @@
 from __future__ import annotations
 
+import inspect
 import json
 import re
 import traceback
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any, Generic, Literal, Type, TypeAlias
 
-from starapi.utils import MISSING
-
-from ._types import (
-    Connection,
-    Converter,
-    GroupT,
-    Lifespan,
-    Receive,
-    Scope,
-    Send,
-    WSMessage,
-)
-from .converters import builtin_converters
+from ._types import Connection, GroupT, Lifespan, Receive, Scope, Send, WSMessage
+from .converters import Converter, builtin_converters
 from .enums import WSCodes, WSMessageType
 from .errors import ConverterNotFound
-from .parameters import Parameter
+from .parameters import Parameter, PathParameter
 from .requests import WebSocket
 from .responses import Response
 from .utils import MISSING, mimmic, set_property
@@ -44,9 +34,7 @@ RouteDecoCallbackType: TypeAlias = Callable[
     RouteType,
 ]
 
-PARAM_REGEX = re.compile(
-    r"{(?P<name>[a-zA-Z_][a-zA-Z0-9_]*):(?P<type>[a-zA-Z_-][a-zA-Z0-9_-]*)?}"
-)
+PATH_PARAM_REGEX = re.compile(r"{(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)}")
 
 
 class _DefaultLifespan:
@@ -63,18 +51,20 @@ class _DefaultLifespan:
 class BaseRoute(Generic[GroupT]):
     _group: GroupT | None
     _state: State
-    _path_data: list[tuple[str, Converter, str | None]]
+    _path_data: list[tuple[str, tuple[Converter, str] | None]]
     description: str
+    _parameters: list[Parameter]
 
     def __init__(self, *, path: str, prefix: bool) -> None:
         if not path.startswith("/"):
             raise ValueError(f"Route paths must start with '/'")
 
-        self.path = path
+        self._path = path
         self._add_prefix: bool = prefix
 
         self._group = None
         self._resolved = None
+        self._path_params_added: bool = False
 
     @property
     def group(self) -> GroupT | None:
@@ -84,48 +74,64 @@ class BaseRoute(Generic[GroupT]):
     def path(self) -> str:
         return self._path
 
-    @path.setter
-    def path(self, new_path: str):
-        self._path = new_path
-
     @property
     def clean_path(self) -> str:
         x = []
-        for regex, _, name in self._path_data:
-            if name is None:
+        for regex, extra in self._path_data:
+            if extra is None:
                 x.append(regex)
             else:
-                x.append(f"{{{name}}}")
+                x.append(f"{{{extra[1]}}}")
         return "/".join(x)
 
     @property
     def add_prefix(self) -> bool:
         return self._add_prefix
 
-    def _compile_path(self) -> None:
-        try:
-            converters = self._state.converters
-        except AttributeError:
-            converters = builtin_converters
+    def _get_path_params(
+        self, signature: inspect.Signature
+    ) -> dict[str, PathParameter]:
+        params = {}
+        skipped_conn: bool = False
+        for name, arg in dict(signature.parameters).items():
+            if name == "self":
+                continue
+            if skipped_conn is False:
+                skipped_conn = True
+                continue
+            params[name] = PathParameter(
+                required=True, name=name, converter=arg.annotation
+            )
+        if self._path_params_added is False:
+            self._parameters.extend(params.values())
+            self._path_params_added = True
+        return params
 
-        path: list[tuple[str, Converter, str | None]] = []
+    def _compile_path(self, signature: inspect.Signature) -> None:
+        path: list[tuple[str, tuple[Converter, str] | None]] = []
+        path_params = self._get_path_params(signature)
 
         for endpoint in self.path.split("/"):
-            convertor = None
-            name = None
+            extra = None
             regex = re.escape(endpoint)
 
-            if data := PARAM_REGEX.fullmatch(endpoint):
-                regex, convertor = converters.get(data["type"], (regex, None))
-                name = data["name"]
-                if convertor is None:
-                    raise ConverterNotFound(name)
+            if match := PATH_PARAM_REGEX.fullmatch(endpoint):
+                name = match["name"]
+                param = path_params.pop(name, None)
+                if param is not None:
+                    converter: Converter = param.annotation()
+                    extra = converter, name
+                    regex = converter.regex
 
-            convertor = convertor or str
-            path.append((regex, convertor, name))
+            path.append((regex, extra))
+
+        if path_params:
+            raise RuntimeError(
+                f"Unknown path parameters in '{self.path}': {', '.join(f'{param.name!r}' for param in path_params.values())}"
+            )
 
         if path[-1][0] != "":
-            path.append(("", str, None))
+            path.append(("", None))
 
         self._path_data = path
 
@@ -138,13 +144,14 @@ class BaseRoute(Generic[GroupT]):
         params = {}
 
         for client_endpoint, server_endpoint in zip(client_path, self._path_data):
-            regex, convertor, name = server_endpoint
+            regex, extra = server_endpoint
             if not re.fullmatch(regex, client_endpoint):
                 return False
-            try:
-                params[name] = convertor(client_endpoint)
-            except ValueError:
-                return False
+            if extra is not None:
+                try:
+                    params[extra[1]] = extra[0].convert(client_endpoint)
+                except ValueError:
+                    return False
         con._scope["path_params"] = params
         return True
 
@@ -171,7 +178,6 @@ class Route(BaseRoute):
         prefix: bool = MISSING,
         responses: dict[int, Type[Struct]] = MISSING,
         query_parameters: list[Parameter] = MISSING,
-        path_parameters: list[Parameter] = MISSING,
         cookies: list[Parameter] = MISSING,
         headers: list[Parameter] = MISSING,
         tags: list[str] = MISSING,
@@ -197,7 +203,6 @@ class Route(BaseRoute):
                 ("query", query_parameters),
                 ("header", headers),
                 ("cookie", cookies),
-                ("path", path_parameters),
             ]:
                 for param in params or []:
                     param.where = where
@@ -241,7 +246,7 @@ class Route(BaseRoute):
             args.append(request)
 
             try:
-                response = await self.callback(*args)
+                response = await self.callback(*args, **request._scope["path_params"])
             except Exception as e:
                 self._state.on_route_error(request, e)
                 response = Response.internal()

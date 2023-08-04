@@ -1,6 +1,12 @@
+from __future__ import annotations
+
 import http
+from typing import TYPE_CHECKING
 
 from .enums import WSMessageType
+
+if TYPE_CHECKING:
+    from .converters import Converter
 
 __all__ = (
     "StarApiException",
@@ -124,8 +130,8 @@ class ConverterException(StarApiException):
 
 
 class ConverterAlreadyAdded(ConverterException):
-    def __init__(self, name: str) -> None:
-        super().__init__(f"A converter with the name {name!r} was already added.")
+    def __init__(self, converter: Converter) -> None:
+        super().__init__(f"The {converter!r} converter was already added")
 
 
 class ConverterNotFound(ConverterException):

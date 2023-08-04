@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from typing import Literal, Type
+from typing import TYPE_CHECKING, Literal, Type
+
+if TYPE_CHECKING:
+    from .converters import Converter
 
 __all__ = ("Parameter",)
 
@@ -32,3 +35,19 @@ class Parameter:
             )
         ]
         return f"<{self.__class__.__name__} {' '.join(x)} >"
+
+
+class PathParameter(Parameter):
+    where: Literal["path"]
+
+    def __init__(
+        self,
+        *,
+        required: bool,
+        name: str,
+        converter: Converter,
+        deprecated: bool = False,
+    ) -> None:
+        super().__init__(
+            required=required, name=name, type=converter, deprecated=deprecated
+        )

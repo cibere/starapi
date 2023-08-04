@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import inspect
+from difflib import IS_LINE_JUNK
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Type, TypeVar, overload
 
 from .errors import GroupAlreadyAdded, InvalidWebSocketRoute
@@ -18,7 +20,7 @@ from .utils import MISSING, mimmic
 
 if TYPE_CHECKING:
     from ._types import Lifespan, Middleware, Receive, Scope, Send
-    from .converters import CustomConverter
+    from .converters import Converter
     from .groups import Group
     from .openapi import OpenAPI
     from .requests import BaseRequest
@@ -44,29 +46,11 @@ class Application(BaseASGIApp):
         # cors: CORSSettings = MISSING,
         lf: Lifespan = MISSING,
         docs: OpenAPI = MISSING,
-        converters: list[CustomConverter] = MISSING,
     ) -> None:
         self._middleware: list[Middleware] = []  # [cors or CORSSettings()]
 
         self.debug = False if MISSING else debug
-        self._state = State(self, lf, docs, converters)
-
-    def add_converter(self, converter: CustomConverter, /) -> None:
-        """
-        Adds a path param converter
-
-        Parameters
-        -----------
-        converter: CustomConverter
-            The converter you want to add.
-
-        Raises
-        -----------
-        ConverterAlreadyAdded
-            Raised if a converter with the same name already exists
-        """
-
-        self._state.add_converter(converter)
+        self._state = State(self, lf, docs)
 
     def add_group(self, group: Group, *, prefix: str = MISSING) -> None:
         """
@@ -89,7 +73,7 @@ class Application(BaseASGIApp):
             raise GroupAlreadyAdded(group.name)
 
         for route in group.__routes__:
-            route.path = f"/{prefix or ''}{route.path}"
+            route._path = f"/{prefix or ''}{route.path}"
 
             self.add_route(route)
 
@@ -130,7 +114,11 @@ class Application(BaseASGIApp):
 
     def add_route(self, route: RouteType, /) -> None:
         route._state = self._state
-        route._compile_path()
+        route._compile_path(
+            inspect.signature(
+                route.callback if isinstance(route, Route) else route.on_connect
+            )
+        )
         self._state.router.routes.append(route)
 
     @mimmic(_create_http_route, keep_return=True)

@@ -35,7 +35,7 @@ class Group:
             route: Route
 
             route._group = self
-            route.path = f'{self.prefix.lower()}/{route.path.lstrip("/")}'
+            route._path = f'{self.prefix.lower()}/{route.path.lstrip("/")}'
             self.__routes__.append(route)
 
     @property

@@ -14,3 +14,5 @@ yes
   - Security/auth
   - Webhooks
   - Servers
+  - WebSocket Route Support
+- status handlers
