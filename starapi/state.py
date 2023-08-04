@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
+from .formatters import ResponseFormatter
 from .routing import Route, Router
 from .utils import MISSING
 
@@ -26,18 +27,22 @@ class State:
     docs: OpenAPI | None
     default_encoder: Encoder
     default_decoder: Decoder
+    formatter: ResponseFormatter
 
     def __init__(
         self,
         app: Application,
+        *,
         lifespan: Lifespan = MISSING,
         docs: OpenAPI = MISSING,
         default_encoder: Encoder = MISSING,
         default_decoder: Decoder = MISSING,
+        formatter: ResponseFormatter = MISSING,
     ):
         self.app = app
         self.router = Router(lifespan=lifespan)
         self.cached_api_docs: dict | None = None
+        self.formatter = formatter or ResponseFormatter()
 
         self.groups: list[Group] = []
         self.docs = docs or None

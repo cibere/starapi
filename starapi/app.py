@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 from difflib import IS_LINE_JUNK
 from typing import (
@@ -34,6 +35,7 @@ except ImportError:
 
 if TYPE_CHECKING:
     from ._types import Lifespan, Middleware, Receive, Scope, Send
+    from .formatters import ResponseFormatter
     from .groups import Group
     from .openapi import OpenAPI
     from .requests import BaseRequest
@@ -60,6 +62,7 @@ class Application(BaseASGIApp):
         lf: Lifespan = MISSING,
         docs: OpenAPI = MISSING,
         default_body_format: Literal["json", "yaml", "toml", "msgpack"] = MISSING,
+        formatter: ResponseFormatter = MISSING,
     ) -> None:
         self._middleware: list[Middleware] = []  # [cors or CORSSettings()]
 
@@ -76,7 +79,25 @@ class Application(BaseASGIApp):
             kwargs["default_encoder"] = default_format.encode
             kwargs["default_decoder"] = default_format.decode
 
-        self._state = State(self, lf, docs, **kwargs)
+        self._state = State(self, lifespan=lf, docs=docs, formatter=formatter, **kwargs)
+
+    def _run_scheduled_task(self, func: Callable | Coroutine, *, name: str) -> None:
+        if isinstance(func, Coroutine):
+            asyncio.create_task(func, name=name)
+        else:
+            func()
+
+    def dispatch(self, event_name: str, *args, **kwargs) -> None:
+        event_name = f"on_{event_name}"
+
+        event: Callable[..., Coroutine[Any, Any, None]] | None = getattr(
+            self, event_name, None
+        )
+        if event is None:
+            return
+        self._run_scheduled_task(
+            event(*args, **kwargs), name=f"event-dispatch: {event_name}"
+        )
 
     def add_group(self, group: Group, *, prefix: str = MISSING) -> None:
         """
