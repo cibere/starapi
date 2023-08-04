@@ -66,7 +66,7 @@ class Decoder(Protocol):
         ...
 
 
-Encoder = Callable[[StructT], bytes]
+Encoder: TypeAlias = "Callable[[Struct], bytes]"
 
 
 class WSCloseMessage(TypedDict):
