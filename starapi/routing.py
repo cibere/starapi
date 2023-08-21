@@ -270,8 +270,7 @@ class Route(BaseRoute):
             try:
                 response = await self._group.group_check(request)
             except Exception as e:
-                self._state.on_route_error(request, e)
-                response = Response.internal()
+                response = await self._state.on_route_error(request, e)
 
         if response is None:
             args.append(request)
@@ -279,8 +278,7 @@ class Route(BaseRoute):
             try:
                 response = await self.callback(*args, **request._scope["path_params"])
             except Exception as e:
-                self._state.on_route_error(request, e)
-                response = Response.internal()
+                response = await self._state.on_route_error(request, e)
 
         await response(request)
 

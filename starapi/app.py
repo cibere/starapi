@@ -212,8 +212,8 @@ class Application(BaseASGIApp):
     ) -> Callable[[WSRouteCallback], WebSocketRoute] | WSRouteT:
         return route_selector.ws(func, path=path, prefix=False)
 
-    async def on_error(self, request: BaseRequest, error: Exception):
-        raise error
+    async def on_error(self, request: BaseRequest, error: Exception) -> Response | None:
+        ...
 
     async def on_request(self, request: Request):
         ...
