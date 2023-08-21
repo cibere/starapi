@@ -16,3 +16,4 @@ yes
   - WebSocket Route Support
 - status handlers
 - add global response schemas, and use the route's callback's return annotation for the ok response. Keep the responses kwarg in `Route` for per-route changes.
+- websocket path parameter support

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from difflib import IS_LINE_JUNK
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -14,7 +13,7 @@ from typing import (
     overload,
 )
 
-from .errors import DependencyException, GroupAlreadyAdded, InvalidWebSocketRoute
+from .errors import DependencyException, GroupAlreadyAdded
 from .requests import Request, WebSocket
 from .routing import (
     HTTPRouteCallback,
@@ -24,6 +23,7 @@ from .routing import (
     WSRouteCallback,
     _create_http_route,
 )
+from .routing import route as route_selector
 from .server import BaseASGIApp
 from .state import State
 from .utils import MISSING, mimmic
@@ -210,29 +210,7 @@ class Application(BaseASGIApp):
         *,
         path: str = MISSING,
     ) -> Callable[[WSRouteCallback], WebSocketRoute] | WSRouteT:
-        try:
-            is_subclassed_route = issubclass(func, WebSocketRoute)
-        except TypeError:
-            is_subclassed_route = False
-        if is_subclassed_route:
-            try:
-                route = func()  # type: ignore
-            except Exception:
-                raise InvalidWebSocketRoute(
-                    "When using the 'Application.ws' decorator with a subclassed route, the __init__ should take 0 arguments"
-                )
-            else:
-                self.add_route(route)
-            return route
-
-        def decorator(callback: WSRouteCallback) -> WebSocketRoute:
-            route = WebSocketRoute(path=path)
-            route.on_connect = callback  # type: ignore
-            route.__doc__ = callback.__doc__
-            self.add_route(route)
-            return route
-
-        return decorator
+        return route_selector.ws(func, path=path, prefix=False)
 
     async def on_error(self, request: BaseRequest, error: Exception):
         raise error

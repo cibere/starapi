@@ -100,7 +100,6 @@ class Server(BaseASGIApp):
         if app is None:
             await self.handle_404(scope, receive, send)
         else:
-            print(f"Sent to {app}")
             await app(scope, receive, send)
 
     def __repr__(self) -> str:

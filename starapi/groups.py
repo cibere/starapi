@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 from typing import TYPE_CHECKING
 
-from .routing import Route, RouteType
+from .routing import Route, RouteType, WebSocketRoute
 from .utils import MISSING
 
 if TYPE_CHECKING:
@@ -34,12 +34,17 @@ class Group:
         self.app = app
 
         for _, route in inspect.getmembers(
-            self, predicate=lambda m: isinstance(m, Route)
+            self, predicate=lambda m: isinstance(m, (Route, WebSocketRoute))
         ):
-            route: Route
+            route: RouteType
 
             route._group = self
             route._path = f'{self.prefix.lower()}/{route.path.lstrip("/")}'
+
+            if isinstance(route, WebSocketRoute):
+                before = route.on_connect
+                route.on_connect = lambda ws: before(self, ws)  # type: ignore # this allows for non-subclassed websockets in groups
+
             self.__routes__.append(route)
 
         if deprecated is MISSING and self._deprecated is MISSING:
@@ -58,9 +63,6 @@ class Group:
         for route in self.__routes__:
             if isinstance(route, Route):
                 route.deprecated = new
-                print(f"Parked {route} as depreciated")
-            else:
-                print(f"Didn't mark {route} as depreciated")
         self._deprecated = new
 
     @property

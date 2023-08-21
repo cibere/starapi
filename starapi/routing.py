@@ -5,12 +5,21 @@ import json
 import re
 import traceback
 from collections.abc import Callable, Coroutine
-from typing import TYPE_CHECKING, Any, Generic, Literal, Type, TypeAlias
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Generic,
+    Literal,
+    Type,
+    TypeAlias,
+    TypeVar,
+    overload,
+)
 
 from ._types import Connection, GroupT, Lifespan, Receive, Scope, Send, WSMessage
 from .converters import Converter, builtin_converters
 from .enums import WSCodes, WSMessageType
-from .errors import ConverterEntryNotFound, ConverterNotFound
+from .errors import ConverterEntryNotFound, ConverterNotFound, InvalidWebSocketRoute
 from .parameters import Parameter, PathParameter
 from .requests import WebSocket
 from .responses import Response
@@ -21,13 +30,18 @@ if TYPE_CHECKING:
 
     from .state import State
 
+    WSRouteT = TypeVar("WSRouteT", bound="WebSocketRoute")
+
 
 __all__ = ("route", "Route", "WebSocketRoute")
 
 RouteType: TypeAlias = "Route | WebSocketRoute"
 ResponseType: TypeAlias = Coroutine[Any, Any, Response]
 HTTPRouteCallback: TypeAlias = Callable[..., ResponseType]
-WSRouteCallback: TypeAlias = Callable[[WebSocket], Coroutine[Any, Any, None]]
+WSRouteCallback: TypeAlias = (
+    Callable[[WebSocket], Coroutine[Any, Any, None]]
+    | Callable[[Any, WebSocket], Coroutine[Any, Any, None]]
+)
 
 RouteDecoCallbackType: TypeAlias = Callable[
     [HTTPRouteCallback],
@@ -276,14 +290,38 @@ class Route(BaseRoute):
 
 class WebSocketRoute(BaseRoute):
     encoding: Literal["text", "json", "bytes"] = "text"
+    _init_subclass_kwarg_data: tuple[str, bool]
 
     def __init__(
         self,
         *,
-        path: str,
+        path: str = MISSING,
         prefix: bool = MISSING,
     ) -> None:
+        if hasattr(self, "_init_subclass_kwarg_data"):
+            p1, p2 = self._init_subclass_kwarg_data
+        else:
+            p1 = p2 = MISSING
+
+        if path is MISSING:
+            if p1 is MISSING:
+                raise ValueError("'path' kwarg not passed")
+            path = p1
+
+        if prefix is MISSING:
+            prefix = False if p2 == MISSING else p2
+
+        self._parameters = []
+
         super().__init__(path=path, prefix=prefix)
+
+    def __init_subclass__(
+        cls,
+        *,
+        path: str = MISSING,
+        prefix: bool = MISSING,
+    ) -> None:
+        cls._init_subclass_kwarg_data = path, prefix
 
     def _match(self, ws: Connection) -> bool:
         if ws._type != "websocket":
@@ -422,6 +460,60 @@ class RouteSelector:
     patch = _quick_gen("PATCH")
     options = _quick_gen("OPTIONS")
     head = _quick_gen("HEAD")
+
+    @overload
+    def ws(
+        self,
+        func: Type[WSRouteT],
+        /,
+    ) -> WSRouteT:
+        ...
+
+    @overload
+    def ws(
+        self, /, *, path: str, prefix: bool = ...
+    ) -> Callable[[WSRouteCallback], WebSocketRoute]:
+        ...
+
+    @overload
+    def ws(
+        self,
+        func: Type[WSRouteT] = MISSING,
+        /,
+        *,
+        path: str = MISSING,
+        prefix: bool = MISSING,
+    ) -> Callable[[WSRouteCallback], WebSocketRoute] | WSRouteT:
+        ...
+
+    def ws(
+        self,
+        func: Type[WSRouteT] = MISSING,
+        /,
+        *,
+        path: str = MISSING,
+        prefix: bool = MISSING,
+    ) -> Callable[[WSRouteCallback], WebSocketRoute] | WSRouteT:
+        try:
+            is_subclassed_route = issubclass(func, WebSocketRoute)
+        except TypeError:
+            is_subclassed_route = False
+        if is_subclassed_route:
+            try:
+                route = func()  # type: ignore
+            except Exception:
+                raise InvalidWebSocketRoute(
+                    "When using the 'Application.ws' decorator with a subclassed route, the __init__ should take 0 arguments"
+                )
+            return route
+
+        def decorator(callback: WSRouteCallback) -> WebSocketRoute:
+            route = WebSocketRoute(path=path)
+            route.on_connect = callback  # type: ignore
+            route.__doc__ = callback.__doc__
+            return route
+
+        return decorator
 
 
 route = RouteSelector()
