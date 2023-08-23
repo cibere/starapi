@@ -6,8 +6,15 @@ from typing import TYPE_CHECKING, Any, Callable, Coroutine, Literal, Type, TypeV
 
 from .errors import DependencyException, GroupAlreadyAdded
 from .requests import Request, WebSocket
-from .routing import HTTPRouteCallback, Route, RouteType, WebSocketRoute, WSRouteCallback, _create_http_route
-from .routing import route as route_selector
+from .routing import (
+    HTTPRouteCallback,
+    Route,
+    RouteType,
+    WebSocketRoute,
+    WSRouteCallback,
+    _create_http_route,
+    route as route_selector,
+)
 from .server import BaseASGIApp
 from .state import State
 from .utils import MISSING, mimmic
@@ -188,10 +195,10 @@ class Application(BaseASGIApp):
         return route_selector.ws(func, path=path, prefix=False)
 
     async def on_route_error(self, request: Request, error: Exception) -> Response | None:
-        ...
+        raise error
 
     async def on_ws_error(self, request: WebSocket, error: Exception) -> None:
-        ...
+        raise error
 
     async def on_request(self, request: Request):
         ...
