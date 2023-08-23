@@ -1,22 +1,25 @@
 from __future__ import annotations
 
 import json
-from typing import (TYPE_CHECKING, Any, AsyncGenerator, Callable, Generic,
-                    Literal, Sequence, TypeVar, overload)
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Generic, Literal, Sequence, TypeVar, overload
 from urllib.parse import parse_qs
 
 from starlette.datastructures import FormData
-from starlette.formparsers import (FormParser, MultiPartException,
-                                   MultiPartParser)
+from starlette.formparsers import FormParser, MultiPartException, MultiPartParser
 from yarl import URL
 
 from .enums import WSCodes, WSMessageType, WSState
-from .errors import (ClientDisconnect, DependencyException, HTTPException,
-                     InvalidBodyData, PayloadValidationException,
-                     UnexpectedASGIMessageType, WebSocketDisconnect,
-                     WebSocketDisconnected)
-from .utils import (MISSING, AsyncIteratorProxy, cached_coro, cached_gen,
-                    cached_property, parse_cookies, url_from_scope)
+from .errors import (
+    ClientDisconnect,
+    DependencyException,
+    HTTPException,
+    InvalidBodyData,
+    PayloadValidationException,
+    UnexpectedASGIMessageType,
+    WebSocketDisconnect,
+    WebSocketDisconnected,
+)
+from .utils import MISSING, AsyncIteratorProxy, cached_coro, cached_gen, cached_property, parse_cookies, url_from_scope
 
 try:
     from multipart.multipart import parse_options_header
@@ -103,11 +106,7 @@ class BaseRequest(Generic[AppT]):
 
     @cached_property
     def query_params(self) -> dict[str, list[str]] | None:
-        return (
-            parse_qs(self._scope["query_string"].decode())
-            if self._scope["query_string"]
-            else None
-        )
+        return parse_qs(self._scope["query_string"].decode()) if self._scope["query_string"] else None
 
     @cached_property
     def cookies(self) -> dict[str, str]:
@@ -166,9 +165,7 @@ class WebSocket(BaseRequest):
                     WSMessageType.disconnect,
                     WSMessageType.receive,
                 ):
-                    raise UnexpectedASGIMessageType(
-                        [WSMessageType.disconnect, WSMessageType.receive], typ.value
-                    )
+                    raise UnexpectedASGIMessageType([WSMessageType.disconnect, WSMessageType.receive], typ.value)
                 return msg  # type: ignore
             case other:
                 raise RuntimeError("Disconnect message has already been received")
@@ -182,9 +179,7 @@ class WebSocket(BaseRequest):
                     case WSMessageType.close:
                         self.application_state = WSState.disconnected
                     case other:
-                        raise UnexpectedASGIMessageType(
-                            [WSMessageType.close, WSMessageType.accept], msg["type"]
-                        )
+                        raise UnexpectedASGIMessageType([WSMessageType.close, WSMessageType.accept], msg["type"])
                 await self._send(msg)
             case WSState.connected:
                 match WSMessageType(msg["type"]):
@@ -193,9 +188,7 @@ class WebSocket(BaseRequest):
                     case WSMessageType.send:
                         pass
                     case other:
-                        raise UnexpectedASGIMessageType(
-                            [WSMessageType.close, WSMessageType.send], other.value
-                        )
+                        raise UnexpectedASGIMessageType([WSMessageType.close, WSMessageType.send], other.value)
                 await self._send(msg)
             case other:
                 raise RuntimeError("Websocket has already been closed")
@@ -207,9 +200,7 @@ class WebSocket(BaseRequest):
     ) -> None:
         if headers is MISSING:
             headers = {}
-        raw_headers: list[tuple[bytes, bytes]] = [
-            (k.encode(), v.encode()) for k, v in headers.items()
-        ]
+        raw_headers: list[tuple[bytes, bytes]] = [(k.encode(), v.encode()) for k, v in headers.items()]
 
         if self.client_state == WSState.connecting:
             await self.receive()
@@ -274,9 +265,7 @@ class WebSocket(BaseRequest):
     async def iter(self, encoding: Literal["json"]) -> AsyncIteratorProxy[dict | list]:
         ...
 
-    async def iter(
-        self, encoding: Literal["bytes", "text", "json"]
-    ) -> AsyncIteratorProxy:
+    async def iter(self, encoding: Literal["bytes", "text", "json"]) -> AsyncIteratorProxy:
         match encoding:
             case "bytes":
                 coro = self.receive_bytes
@@ -285,9 +274,7 @@ class WebSocket(BaseRequest):
             case "json":
                 coro = self.receive_json
             case other:
-                raise ValueError(
-                    f"Expected 'bytes', 'text', or 'json' for encoding. Received {other!r} instead"
-                )
+                raise ValueError(f"Expected 'bytes', 'text', or 'json' for encoding. Received {other!r} instead")
         return AsyncIteratorProxy(coro)
 
     async def send_text(self, content: str) -> None:
@@ -380,9 +367,7 @@ class Request(BaseRequest):
         """
 
         if msgspec is None:
-            raise DependencyException(
-                "msgspec", "msgspec is required for the builtin payload implimentation."
-            )
+            raise DependencyException("msgspec", "msgspec is required for the builtin payload implimentation.")
         payload = self.endpoint._payload
         if payload is None:
             raise RuntimeError("The route must have a set payload to use this")
@@ -418,9 +403,7 @@ class Request(BaseRequest):
         max_files: int | float = 1000,
         max_fields: int | float = 1000,
     ) -> FormData:
-        assert (
-            parse_options_header is not None
-        ), "The `python-multipart` library must be installed to use form parsing."
+        assert parse_options_header is not None, "The `python-multipart` library must be installed to use form parsing."
         content_type_header = self.headers.get("Content-Type")
         content_type: bytes
         content_type, _ = parse_options_header(content_type_header)

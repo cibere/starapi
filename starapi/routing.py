@@ -5,16 +5,7 @@ import json
 import re
 import traceback
 from collections.abc import Callable, Coroutine
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Generic,
-    Literal,
-    Type,
-    TypeAlias,
-    TypeVar,
-    overload,
-)
+from typing import TYPE_CHECKING, Any, Generic, Literal, Type, TypeAlias, TypeVar, overload
 
 from ._types import Connection, GroupT, Lifespan, Receive, Scope, Send, WSMessage
 from .converters import Converter, builtin_converters
@@ -39,8 +30,7 @@ RouteType: TypeAlias = "Route | WebSocketRoute"
 ResponseType: TypeAlias = Coroutine[Any, Any, Response]
 HTTPRouteCallback: TypeAlias = Callable[..., ResponseType]
 WSRouteCallback: TypeAlias = (
-    Callable[[WebSocket], Coroutine[Any, Any, None]]
-    | Callable[[Any, WebSocket], Coroutine[Any, Any, None]]
+    Callable[[WebSocket], Coroutine[Any, Any, None]] | Callable[[Any, WebSocket], Coroutine[Any, Any, None]]
 )
 
 RouteDecoCallbackType: TypeAlias = Callable[
@@ -102,9 +92,7 @@ class BaseRoute(Generic[GroupT]):
     def add_prefix(self) -> bool:
         return self._add_prefix
 
-    def _get_path_params(
-        self, signature: inspect.Signature
-    ) -> dict[str, PathParameter]:
+    def _get_path_params(self, signature: inspect.Signature) -> dict[str, PathParameter]:
         params = {}
         skipped_conn: bool = False
         for name, arg in dict(signature.parameters).items():
@@ -113,9 +101,7 @@ class BaseRoute(Generic[GroupT]):
             if skipped_conn is False:
                 skipped_conn = True
                 continue
-            params[name] = PathParameter(
-                required=True, name=name, converter=arg.annotation
-            )
+            params[name] = PathParameter(required=True, name=name, converter=arg.annotation)
         if self._path_params_added is False:
             self._parameters.extend(params.values())
             self._path_params_added = True
@@ -354,11 +340,7 @@ class WebSocketRoute(BaseRoute):
                         await self._dispatch_receive(ws, msg)
                     case WSMessageType.disconnect:
                         code = msg.get("code", None)
-                        close_code = (
-                            WSCodes(code)
-                            if code is not None
-                            else WSCodes.NORMAL_CLOSURE
-                        )
+                        close_code = WSCodes(code) if code is not None else WSCodes.NORMAL_CLOSURE
                         break
         except Exception as e:
             await self._state.on_ws_error(ws, e)
@@ -391,7 +373,7 @@ class WebSocketRoute(BaseRoute):
             else:
                 x = "nothing"
             raise RuntimeError(f"Expected {self.encoding} ws message, received {x}.")
-        await self.on_receive(ws, data)  # type: ignore
+        await self.on_receive(ws, data)
 
     async def on_connect(self, ws: WebSocket) -> None:
         await ws.accept()
@@ -468,9 +450,7 @@ class RouteSelector:
         ...
 
     @overload
-    def ws(
-        self, /, *, path: str, prefix: bool = ...
-    ) -> Callable[[WSRouteCallback], WebSocketRoute]:
+    def ws(self, /, *, path: str, prefix: bool = ...) -> Callable[[WSRouteCallback], WebSocketRoute]:
         ...
 
     @overload
@@ -498,7 +478,7 @@ class RouteSelector:
             is_subclassed_route = False
         if is_subclassed_route:
             try:
-                route = func()  # type: ignore
+                route = func()
             except Exception:
                 raise InvalidWebSocketRoute(
                     "When using the 'Application.ws' decorator with a subclassed route, the __init__ should take 0 arguments"
@@ -537,9 +517,7 @@ class Router:
             async with self.lifespan_context(scope.get("app")) as maybe_state:
                 if maybe_state is not None:
                     if "state" not in scope:
-                        raise RuntimeError(
-                            'The server does not support "state" in the lifespan scope.'
-                        )
+                        raise RuntimeError('The server does not support "state" in the lifespan scope.')
                     scope["state"].update(maybe_state)
                 await send({"type": "lifespan.startup.complete"})
                 started = True

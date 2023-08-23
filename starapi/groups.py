@@ -21,9 +21,7 @@ class Group:
     app: Application
     _deprecated: bool
 
-    def __init_subclass__(
-        cls, prefix: str = MISSING, deprecated: bool = MISSING
-    ) -> None:
+    def __init_subclass__(cls, prefix: str = MISSING, deprecated: bool = MISSING) -> None:
         cls.prefix = prefix or cls.__name__
         cls._deprecated = deprecated
         if cls.prefix and not cls.prefix.startswith("/"):
@@ -33,9 +31,7 @@ class Group:
         self.__routes__ = []
         self.app = app
 
-        for _, route in inspect.getmembers(
-            self, predicate=lambda m: isinstance(m, (Route, WebSocketRoute))
-        ):
+        for _, route in inspect.getmembers(self, predicate=lambda m: isinstance(m, (Route, WebSocketRoute))):
             route: RouteType
 
             route._group = self
@@ -92,9 +88,7 @@ class Group:
 
         ...
 
-    async def on_route_error(
-        self, request: Request, error: Exception
-    ) -> Response | None:
+    async def on_route_error(self, request: Request, error: Exception) -> Response | None:
         ...
 
     async def on_ws_error(self, request: WebSocket, error: Exception) -> None:

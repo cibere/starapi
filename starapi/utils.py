@@ -76,9 +76,7 @@ class ModelProxy:
         return len(self.__dict__)
 
     def __repr__(self) -> str:
-        inner = ", ".join(
-            (f"{k}={v!r}" for k, v in self.__dict__.items() if not k.startswith("_"))
-        )
+        inner = ", ".join((f"{k}={v!r}" for k, v in self.__dict__.items() if not k.startswith("_")))
         return f"{self.__class__.__name__}({inner})"
 
     def __getattr__(self, attr: str) -> None:
@@ -204,16 +202,12 @@ def set_property(name: str, value: Any) -> Callable[[FuncT], FuncT]:
 
 
 @overload
-def mimmic(
-    this: Callable[P, Any], keep_return: Literal[True]
-) -> Callable[[Callable[..., Return2T]], Callable[P, Return2T]]:
+def mimmic(this: Callable[P, Any], keep_return: Literal[True]) -> Callable[[Callable[..., Return2T]], Callable[P, Return2T]]:
     ...
 
 
 @overload
-def mimmic(
-    this: Callable[P, Optional[ReturnT]]
-) -> Callable[[Callable], Callable[P, Optional[ReturnT]]]:
+def mimmic(this: Callable[P, Optional[ReturnT]]) -> Callable[[Callable], Callable[P, Optional[ReturnT]]]:
     ...
 
 

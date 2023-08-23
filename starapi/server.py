@@ -35,9 +35,7 @@ class BaseASGIApp:
         try:
             import uvicorn
         except ImportError:
-            raise DependencyException(
-                "uvicorn", "uvicorn is used as the default ASGI webserver."
-            ) from None
+            raise DependencyException("uvicorn", "uvicorn is used as the default ASGI webserver.") from None
 
         uvicorn.run(self, *args, **kwargs)
 
@@ -53,9 +51,7 @@ class BaseASGIApp:
         try:
             import uvicorn
         except ImportError:
-            raise DependencyException(
-                "uvicorn", "uvicorn is used as the default ASGI webserver."
-            ) from None
+            raise DependencyException("uvicorn", "uvicorn is used as the default ASGI webserver.") from None
 
         server = uvicorn.Server(uvicorn.Config(self, *args, **kwargs))
         await server.serve()

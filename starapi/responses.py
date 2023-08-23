@@ -48,9 +48,7 @@ class Response:
         self.raw_body = data
         self._body = data
 
-    def _msgspec_parsing(
-        self, *, accept_header: str | None, state: State
-    ) -> bytes | None:
+    def _msgspec_parsing(self, *, accept_header: str | None, state: State) -> bytes | None:
         if msgspec is None:
             return
 
@@ -103,15 +101,11 @@ class Response:
 
         return [(k.lower().encode(), v.encode()) for k, v in headers.items()]
 
-    async def __call__(
-        self, request: Request, *, bypass_formatter: bool = False
-    ) -> None:
+    async def __call__(self, request: Request, *, bypass_formatter: bool = False) -> None:
         if bypass_formatter is False:
             self = await request.app._state.formatter(request, self)  # type: ignore
 
-        body = self._parse_body(
-            accept_header=request.headers.get("accept", None), state=request.app._state
-        )
+        body = self._parse_body(accept_header=request.headers.get("accept", None), state=request.app._state)
 
         await request._send(
             {
@@ -123,39 +117,27 @@ class Response:
         await request._send({"type": "http.response.body", "body": body})
 
     @classmethod
-    def ok(
-        cls, data: DataType = None, headers: Optional[dict[str, str]] = None
-    ) -> Self:
+    def ok(cls, data: DataType = None, headers: Optional[dict[str, str]] = None) -> Self:
         return cls(data, 200 if data else 201, headers=headers)
 
     @classmethod
-    def client_error(
-        cls, data: DataType = None, headers: Optional[dict[str, str]] = None
-    ) -> Self:
+    def client_error(cls, data: DataType = None, headers: Optional[dict[str, str]] = None) -> Self:
         return cls(data, 400, headers=headers)
 
     @classmethod
-    def unauthorized(
-        cls, data: DataType = None, headers: Optional[dict[str, str]] = None
-    ) -> Self:
+    def unauthorized(cls, data: DataType = None, headers: Optional[dict[str, str]] = None) -> Self:
         return cls(data, 401, headers=headers)
 
     @classmethod
-    def forbidden(
-        cls, data: DataType = None, headers: Optional[dict[str, str]] = None
-    ) -> Self:
+    def forbidden(cls, data: DataType = None, headers: Optional[dict[str, str]] = None) -> Self:
         return cls(data, 403, headers=headers)
 
     @classmethod
-    def not_found(
-        cls, data: Optional[Any] = None, headers: Optional[dict[str, str]] = None
-    ) -> Self:
+    def not_found(cls, data: Optional[Any] = None, headers: Optional[dict[str, str]] = None) -> Self:
         return cls(data, 404, headers=headers)
 
     @classmethod
-    def internal(
-        cls, data: DataType = None, headers: Optional[dict[str, str]] = None
-    ) -> Self:
+    def internal(cls, data: DataType = None, headers: Optional[dict[str, str]] = None) -> Self:
         return cls(data, 500, headers=headers)
 
     @classmethod
@@ -165,9 +147,7 @@ class Response:
         return cls(b"", headers=headers)
 
     @classmethod
-    def method_not_allowed(
-        cls, data: DataType = None, headers: Optional[dict[str, str]] = None
-    ) -> Self:
+    def method_not_allowed(cls, data: DataType = None, headers: Optional[dict[str, str]] = None) -> Self:
         return cls("Method Not Allowed" if data is None else data, 405, headers=headers)
 
     def __repr__(self) -> str:

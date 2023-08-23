@@ -48,6 +48,4 @@ class PathParameter(Parameter):
         converter: Converter,
         deprecated: bool = False,
     ) -> None:
-        super().__init__(
-            required=required, name=name, type=converter, deprecated=deprecated
-        )
+        super().__init__(required=required, name=name, type=converter, deprecated=deprecated)

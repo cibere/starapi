@@ -151,9 +151,7 @@ class OpenAPI:
         translator = msgspec.inspect._Translator([python_type])
         t, args, _ = msgspec.inspect._origin_args_metadata(python_type)
         msgspec_type = translator._translate_inner(t, args)
-        return msgspec._json_schema._to_schema(
-            msgspec_type, {}, "#/$defs/{name}", False
-        )
+        return msgspec._json_schema._to_schema(msgspec_type, {}, "#/$defs/{name}", False)
 
     def generate_param_spec(self, param: Parameter) -> dict:
         schema = {"title": param.name.title()}
@@ -173,11 +171,7 @@ class OpenAPI:
             objects.append(model)
             return {
                 "description": model.__doc__ or "",
-                "content": {
-                    "application/json": {
-                        "schema": {"$ref": f"#/components/schemas/{model.__name__}"}
-                    }
-                },
+                "content": {"application/json": {"schema": {"$ref": f"#/components/schemas/{model.__name__}"}}},
             }
 
         data = {
@@ -195,9 +189,7 @@ class OpenAPI:
         return objects, data
 
     def _add_models_from_queue(self) -> None:
-        self._current["components"]["schemas"] = msgspec.json.schema_components(
-            self._objects_queue
-        )[1]
+        self._current["components"]["schemas"] = msgspec.json.schema_components(self._objects_queue)[1]
 
     def add_route(self, route: Route) -> None:
         if route.hidden is True:

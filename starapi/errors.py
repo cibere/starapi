@@ -103,19 +103,14 @@ class ASGIException(StarApiException):
 
 
 class UnexpectedASGIMessageType(ASGIException):
-    def __init__(
-        self, expected: list[str | WSMessageType] | str | WSMessageType, received: str
-    ) -> None:
+    def __init__(self, expected: list[str | WSMessageType] | str | WSMessageType, received: str) -> None:
         if isinstance(expected, str):
             expected = [expected]
         elif isinstance(expected, WSMessageType):
             expected = [expected.value]
 
         e = [f"{ex!r}" if isinstance(ex, str) else f"{ex.value!r}" for ex in expected]
-        super().__init__(
-            f"Expected ASGI message type {' or '.join(e)},"
-            f"received {received!r} instead."
-        )
+        super().__init__(f"Expected ASGI message type {' or '.join(e)}," f"received {received!r} instead.")
 
 
 class WebSocketException(StarApiException):

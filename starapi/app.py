@@ -2,27 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Coroutine,
-    Literal,
-    Type,
-    TypeVar,
-    overload,
-)
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Literal, Type, TypeVar, overload
 
 from .errors import DependencyException, GroupAlreadyAdded
 from .requests import Request, WebSocket
-from .routing import (
-    HTTPRouteCallback,
-    Route,
-    RouteType,
-    WebSocketRoute,
-    WSRouteCallback,
-    _create_http_route,
-)
+from .routing import HTTPRouteCallback, Route, RouteType, WebSocketRoute, WSRouteCallback, _create_http_route
 from .routing import route as route_selector
 from .server import BaseASGIApp
 from .state import State
@@ -38,7 +22,6 @@ if TYPE_CHECKING:
     from .formatters import ResponseFormatter
     from .groups import Group
     from .openapi import OpenAPI
-    from .requests import BaseRequest
     from .responses import Response
 
     HandleStatusFunc = Callable[[Request, int], Coroutine[Any, Any, Response]]
@@ -90,14 +73,10 @@ class Application(BaseASGIApp):
     def dispatch(self, event_name: str, *args, **kwargs) -> None:
         event_name = f"on_{event_name}"
 
-        event: Callable[..., Coroutine[Any, Any, None]] | None = getattr(
-            self, event_name, None
-        )
+        event: Callable[..., Coroutine[Any, Any, None]] | None = getattr(self, event_name, None)
         if event is None:
             return
-        self._run_scheduled_task(
-            event(*args, **kwargs), name=f"event-dispatch: {event_name}"
-        )
+        self._run_scheduled_task(event(*args, **kwargs), name=f"event-dispatch: {event_name}")
 
     def add_group(self, group: Group, *, prefix: str = MISSING) -> None:
         """
@@ -162,11 +141,7 @@ class Application(BaseASGIApp):
 
     def add_route(self, route: RouteType, /) -> None:
         route._state = self._state
-        route._compile_path(
-            inspect.signature(
-                route.callback if isinstance(route, Route) else route.on_connect
-            )
-        )
+        route._compile_path(inspect.signature(route.callback if isinstance(route, Route) else route.on_connect))
         self._state.router.routes.append(route)
 
     @mimmic(_create_http_route, keep_return=True)
@@ -212,9 +187,7 @@ class Application(BaseASGIApp):
     ) -> Callable[[WSRouteCallback], WebSocketRoute] | WSRouteT:
         return route_selector.ws(func, path=path, prefix=False)
 
-    async def on_route_error(
-        self, request: Request, error: Exception
-    ) -> Response | None:
+    async def on_route_error(self, request: Request, error: Exception) -> Response | None:
         ...
 
     async def on_ws_error(self, request: WebSocket, error: Exception) -> None:

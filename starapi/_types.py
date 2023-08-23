@@ -97,13 +97,7 @@ class WSSendJSONMessage(_WSSendDataMessage):
     json: dict | list
 
 
-WSMessage: TypeAlias = (
-    WSCloseMessage
-    | WSAcceptMessage
-    | WSSendTextMessage
-    | WSSendBytesMessage
-    | WSSendJSONMessage
-)
+WSMessage: TypeAlias = WSCloseMessage | WSAcceptMessage | WSSendTextMessage | WSSendBytesMessage | WSSendJSONMessage
 
 
 class StartResponseMessage(TypedDict):
@@ -139,8 +133,5 @@ class LifespanShutdownFailed(TypedDict):
 
 
 LifespanMessage: TypeAlias = (
-    LifespanStartupCompleteMessage
-    | LifespanShutdownCompleteMessage
-    | LifespanStartupFailed
-    | LifespanShutdownFailed
+    LifespanStartupCompleteMessage | LifespanShutdownCompleteMessage | LifespanStartupFailed | LifespanShutdownFailed
 )
