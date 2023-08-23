@@ -75,6 +75,7 @@ class BaseRequest(Generic[AppT]):
         self._type = scope["type"]
 
         self._stream_consumed = False
+        self.user: Any = None
 
     @property
     def app(self) -> AppT:
