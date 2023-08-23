@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable, TypeVar
 
+from .routing import Route, WebSocketRoute
+
 if TYPE_CHECKING:
     from ._types import Check
-    from .routing import Route, WebSocketRoute
+
 
 T = TypeVar('T')
 
