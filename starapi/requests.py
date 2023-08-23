@@ -140,7 +140,7 @@ class BaseRequest(Generic[AppT]):
         return f"<{self.__class__.__name__} {' '.join(x)} >"
 
 
-class WebSocket(BaseRequest):
+class WebSocket(BaseRequest, Generic[AppT]):
     _type: Literal["websocket"]
 
     def __init__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -298,7 +298,7 @@ class WebSocket(BaseRequest):
         )
 
 
-class Request(BaseRequest):
+class Request(BaseRequest, Generic[AppT]):
     _type: Literal["http"]
 
     @property
