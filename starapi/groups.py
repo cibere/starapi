@@ -8,7 +8,7 @@ from .utils import MISSING
 
 if TYPE_CHECKING:
     from .app import Application
-    from .requests import BaseRequest
+    from .requests import BaseRequest, Request, WebSocket
     from .responses import Response
 
 
@@ -92,7 +92,12 @@ class Group:
 
         ...
 
-    async def on_error(self, request: BaseRequest, exec: Exception) -> Response | None:
+    async def on_route_error(
+        self, request: Request, error: Exception
+    ) -> Response | None:
+        ...
+
+    async def on_ws_error(self, request: WebSocket, error: Exception) -> None:
         ...
 
     def __repr__(self) -> str:

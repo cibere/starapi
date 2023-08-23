@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from typing import TYPE_CHECKING
 
 from .formatters import ResponseFormatter
@@ -18,7 +17,7 @@ if TYPE_CHECKING:
     from .app import Application
     from .groups import Group
     from .openapi import OpenAPI
-    from .requests import BaseRequest
+    from .requests import Request, WebSocket
 
 
 __all__ = ("State",)
@@ -52,20 +51,29 @@ class State:
             self.default_decoder = default_decoder or msgspec.json.decode  # type: ignore
             self.default_encoder = default_encoder or msgspec.json.encode
 
-    async def on_route_error(self, request: BaseRequest, error: Exception) -> Response:
+    async def on_route_error(self, request: Request, error: Exception) -> Response:
         route = request.endpoint
         assert route is not None
 
         response = None
         if route._group is not None:
-            response = await route._group.on_error(request, error)
+            response = await route._group.on_route_error(request, error)
 
         if response is None:
-            response = await route._state.app.on_error(request, error)
+            response = await route._state.app.on_route_error(request, error)
 
         if response is None:
             return Response.internal()
         return response
+
+    async def on_ws_error(self, ws: WebSocket, error: Exception) -> None:
+        route = ws.endpoint
+        assert route is not None
+
+        if route._group is not None:
+            await route._group.on_ws_error(ws, error)
+
+        await route._state.app.on_ws_error(ws, error)
 
     def get_docs(self) -> OpenAPI | None:
         if self.docs is None:

@@ -339,7 +339,7 @@ class WebSocketRoute(BaseRoute):
         try:
             await self.on_connect(ws)
         except Exception as e:
-            self._state.on_route_error(ws, e)
+            await self._state.on_ws_error(ws, e)
             await self.on_disconnect(ws, WSCodes.INTERNAL_ERROR)
 
         if getattr(self.on_receive, "__starapi_original__", False) is True:
@@ -361,7 +361,7 @@ class WebSocketRoute(BaseRoute):
                         )
                         break
         except Exception as e:
-            self._state.on_route_error(ws, e)
+            await self._state.on_ws_error(ws, e)
             close_code = WSCodes.INTERNAL_ERROR
         finally:
             await self.on_disconnect(ws, close_code)
