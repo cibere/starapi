@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import datetime
-import re
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Callable, Self, Type
+from typing import Any, Type
 
 from .utils import MISSING
 
@@ -28,6 +27,10 @@ class Converter(ABC):
     @abstractmethod
     def convert(self, value: str) -> Any:
         raise NotImplementedError("This should be overriden")
+
+    @classmethod
+    def decode(cls, value: Any) -> Any:
+        return value
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__}> regex={self.regex!r}"
