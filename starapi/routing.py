@@ -7,7 +7,7 @@ import traceback
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any, Generic, Literal, Type, TypeAlias, TypeVar, overload
 
-from ._types import Connection, GroupT, Lifespan, Receive, Scope, Send, WSMessage
+from ._types import Check, Connection, GroupT, HTTPCheck, Lifespan, Receive, Scope, Send, WSCheck, WSMessage
 from .converters import Converter, builtin_converters
 from .enums import WSCodes, WSMessageType
 from .errors import ConverterEntryNotFound, ConverterNotFound, InvalidWebSocketRoute
@@ -58,6 +58,7 @@ class BaseRoute(Generic[GroupT]):
     _path_data: list[tuple[str, tuple[Converter, str] | None]]
     description: str
     _parameters: list[Parameter]
+    _checks: list[Check]
 
     def __init__(self, *, path: str, prefix: bool) -> None:
         if not path.startswith("/"):
@@ -69,6 +70,7 @@ class BaseRoute(Generic[GroupT]):
         self._group = None
         self._resolved = None
         self._path_params_added: bool = False
+        self._checks = []
 
     @property
     def group(self) -> GroupT | None:
@@ -187,6 +189,7 @@ class BaseRoute(Generic[GroupT]):
 
 class Route(BaseRoute):
     callback: HTTPRouteCallback
+    _checks: list[HTTPCheck]
 
     def __init__(
         self,
@@ -259,12 +262,18 @@ class Route(BaseRoute):
                 response = await self._state.on_route_error(request, e)
 
         if response is None:
-            args.append(request)
+            for check in self._checks + getattr(self.callback, "__starapi_checks__", []):
+                value = await check(request)
+                if isinstance(value, Response):
+                    response = value
+                    break
+            else:
+                args.append(request)
 
-            try:
-                response = await self.callback(*args, **request._scope["path_params"])
-            except Exception as e:
-                response = await self._state.on_route_error(request, e)
+                try:
+                    response = await self.callback(*args, **request._scope["path_params"])
+                except Exception as e:
+                    response = await self._state.on_route_error(request, e)
 
         await response(request)
 
@@ -275,6 +284,7 @@ class Route(BaseRoute):
 class WebSocketRoute(BaseRoute):
     encoding: Literal["text", "json", "bytes"] = "text"
     _init_subclass_kwarg_data: tuple[str, bool]
+    _checks: list[WSCheck]
 
     def __init__(
         self,
@@ -321,6 +331,10 @@ class WebSocketRoute(BaseRoute):
         assert ws._type == "websocket"
 
         ws._scope["endpoint"] = self
+
+        for check in self._checks + getattr(self.on_connect, "__starapi_checks__", []):
+            if await check(ws) is False:
+                return
 
         try:
             await self.on_connect(ws)

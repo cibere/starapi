@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 
     from .app import Application
     from .groups import Group
+    from .responses import Response
 
     AppT = TypeVar("AppT", bound=Application, default=Application)
     GroupT = TypeVar("GroupT", bound=Group, covariant=True, default=Group)
@@ -135,3 +136,16 @@ class LifespanShutdownFailed(TypedDict):
 LifespanMessage: TypeAlias = (
     LifespanStartupCompleteMessage | LifespanShutdownCompleteMessage | LifespanStartupFailed | LifespanShutdownFailed
 )
+
+
+class HTTPCheck(Protocol):
+    async def __call__(self, request: Request) -> Response | None:
+        ...
+
+
+class WSCheck(Protocol):
+    async def __call__(self, ws: WebSocket) -> bool:
+        ...
+
+
+Check: TypeAlias = HTTPCheck | WSCheck
